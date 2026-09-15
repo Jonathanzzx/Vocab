@@ -1,0 +1,28 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases and runtime data
+*.db
+*.sqlite3
+
+# Environment and secrets
+.env
+.venv/
+venv/
+ENV/
+
+# IDE and tooling
+.vscode/
+.idea/
+.VSCodeCounter/
+*.swp
+*.swo
+*~
+.DS_Store
