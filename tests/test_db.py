@@ -168,7 +168,7 @@ def test_circadian_and_latency_analytics(temp_db):
     assert hourly[9]["retention_rate"] == 100.0
     assert hourly[23]["reviews"] == 1
     assert hourly[23]["avg_thought_time"] == 8.5
-    assert hourly[23]["retention_rate"] == 0.0
+    assert hourly[23]["retention_rate"] == 100.0  # Hard is correct recall.
 
     # Circadian periods
     periods = temp_db.get_circadian_periods_summary(group_id=gid)
@@ -414,7 +414,7 @@ def test_circadian_periods_differentiates_new_words_from_fatigue(temp_db):
     assert afternoon["reviews"] == 5
     assert afternoon["new_learning_revs"] == 5
     assert afternoon["retention_rate"] == 40.0
-    assert "New Acquisition" in afternoon["state_label"]
+    assert "Small sample" in afternoon["state_label"]
     assert "Fatigue Zone" not in afternoon["state_label"]
 
     # Night had low retention (20%) on established review cards with high latency (8.0s),
@@ -422,7 +422,8 @@ def test_circadian_periods_differentiates_new_words_from_fatigue(temp_db):
     assert night["reviews"] == 5
     assert night["review_revs"] == 5
     assert night["retention_rate"] == 20.0
-    assert "Fatigue Zone" in night["state_label"]
+    assert "Fatigue Zone" not in night["state_label"]
+    assert "Small sample" in night["state_label"]
 
 
 def test_render_stats_dashboard_cognitive_acquisition_display(temp_db):
@@ -459,9 +460,9 @@ def test_render_stats_dashboard_cognitive_acquisition_display(temp_db):
             circadian_periods=circadian
         )
         output = capture_console.file.getvalue()
-        assert "Active Time Periods & Circadian Performance" in output
-        assert "Cognitive analysis note" in output
-        assert "not tiredness or fatigue" in output
+        assert "Activity by time of day" in output
+        assert "Observational data" in output
+        assert "do not measure focus or fatigue" in output
     finally:
         stats_views.console = orig_console
 
@@ -805,7 +806,7 @@ def test_log_review_outlier_protection(temp_db):
     logs = temp_db.get_word_review_logs(wid)
     assert len(logs) == 1
     assert logs[0].elapsed_seconds == 85.5
-    assert logs[0].thought_time_seconds == 0.0
+    assert logs[0].thought_time_seconds == 85.5
 
 
 def test_check_and_update_mastery_and_session_exclusion(temp_db):
@@ -835,7 +836,8 @@ def test_check_and_update_mastery_and_session_exclusion(temp_db):
     temp_db.update_word(w)
 
     # Check and update mastery
-    mastered = temp_db.check_and_update_mastery(wid)
+    assert temp_db.check_and_update_mastery(wid) is None
+    mastered = temp_db.set_word_mastery(wid, True)
     assert mastered is not None
     assert mastered.state == CardState.MASTERED.value
 

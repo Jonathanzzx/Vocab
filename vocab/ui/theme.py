@@ -1,65 +1,71 @@
-"""
-Theme, colors, headers, and UI styling utilities using Rich.
-"""
+"""Shared, restrained terminal presentation."""
 from __future__ import annotations
-import os
-import sys
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
-from rich.table import Table
-from rich.align import Align
+from rich.theme import Theme
 from rich.rule import Rule
+from rich.text import Text
+from rich.panel import Panel
+from rich.box import ROUNDED
+from rich.table import Table
+
+PALETTE = Theme({
+    "accent": "#7dd3cf", "muted": "#94a3b8", "border": "#475569",
+    "heading": "bold #e2e8f0", "success": "#86c8a0", "warning": "#e5ba73",
+    "cyan": "#7dd3cf", "bright_cyan": "#7dd3cf", "blue": "#8caacb",
+    "bright_blue": "#8caacb", "green": "#86c8a0", "bright_green": "#86c8a0",
+    "yellow": "#e5ba73", "bright_yellow": "#e5ba73", "red": "#ed9c9c",
+    "bright_red": "#ed9c9c", "magenta": "#b4a8cc", "bright_magenta": "#b4a8cc",
+})
+console = Console(theme=PALETTE, highlight=False)
+BANNER_ART = "[heading]V O C A B[/heading]   [muted]Vocabulary practice[/muted]"
 
 
-console = Console()
-
-BANNER_ART = r"""
- [bold bright_cyan]██╗   ██╗ ██████╗  ██████╗ █████╗ ██████╗ [/bold bright_cyan]  [bold bright_white]VOCAB STUDIO[/bold bright_white]
- [bold cyan]██║   ██║██╔═══██╗██╔════╝██╔══██╗██╔══██╗[/bold cyan]  [dim cyan]Adaptive Spaced Repetition[/dim cyan]
- [bold cyan]██║   ██║██║   ██║██║     ███████║██████╔╝[/bold cyan]  [bold yellow]Recurrent Memory Engine[/bold yellow]
- [bold deep_sky_blue1]╚██╗ ██╔╝██║   ██║██║     ██╔══██║██╔══██╗[/bold deep_sky_blue1]  [dim]v1.0.0 • Terminal Edition[/dim]
-  [bold dodger_blue1]╚████╔╝ ╚██████╔╝╚██████╗██║  ██║██████╔╝[/bold dodger_blue1]
-   [bold dodger_blue1]╚═══╝   ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═════╝ [/bold dodger_blue1]
-"""
+def clear_screen():
+    if console.is_terminal:
+        console.clear()
 
 
-def clear_screen() -> None:
-    """Cross-platform screen clear."""
-    os.system("cls" if os.name == "nt" else "clear")
-
-
-def render_header(subtitle: str = "") -> None:
-    """Renders the top banner and current context with an elegant rule."""
+def render_header(subtitle=""):
     clear_screen()
+    console.print()
     console.print(BANNER_ART)
-    if subtitle:
-        console.print(Rule(title=f"[bold bright_cyan]◆ {subtitle} ◆[/bold bright_cyan]", style="bright_blue", characters="─"))
-        console.print()
-
-
-def render_breadcrumb(path: list[str]) -> None:
-    """Prints a styled navigation breadcrumb."""
-    parts = []
-    for i, p in enumerate(path):
-        if i == len(path) - 1:
-            parts.append(f"[bold bright_white]{p}[/bold bright_white]")
-        else:
-            parts.append(f"[dim cyan]{p}[/dim cyan]")
-    console.print("  " + " [dim]›[/dim] ".join(parts))
+    console.print("[muted]Spaced review · Active recall · Personal library[/muted]")
+    console.print()
+    console.print(Rule(Text(subtitle, style="heading"), style="border", align="left"))
     console.print()
 
 
-def pause_prompt(message: str = "Press Enter to continue...") -> None:
-    """Displays a prompt waiting for user to press enter."""
-    console.print(f"\n[dim]{message}[/dim]", end="")
+def metric_panel(value, label, detail=""):
+    text = Text(str(value), style=PALETTE.styles["heading"])
+    if detail:
+        text.append("\n" + detail, style="not bold #94a3b8")
+    return Panel(text, title=Text(label, style=PALETTE.styles["accent"]), title_align="left",
+                 border_style=PALETTE.styles["border"], box=ROUNDED, padding=(1, 2))
+
+
+def metric_grid(panels, width):
+    columns = len(panels) if width >= len(panels) * 22 else (2 if width >= 52 else 1)
+    grid = Table.grid(expand=True, padding=(0, 1))
+    for _ in range(columns):
+        grid.add_column(ratio=1)
+    for start in range(0, len(panels), columns):
+        row = panels[start:start + columns]
+        grid.add_row(*row, *([""] * (columns - len(row))))
+    return grid
+
+
+def render_breadcrumb(path):
+    console.print(Text("  ›  ".join(path), style="muted"))
+    console.print()
+
+
+def pause_prompt(message="Press Enter to continue..."):
+    console.print(Text("\n" + message, style="muted"), end="")
     try:
         input()
     except (KeyboardInterrupt, EOFError):
         pass
 
 
-def make_key_hint(key: str, desc: str) -> str:
-    """Formats a keyboard shortcut hint."""
-    return f"[bold yellow]\\[{key}][/bold yellow] [white]{desc}[/white]"
-
+def make_key_hint(key, desc):
+    return f"[accent]\\[{key}][/accent] {desc}"

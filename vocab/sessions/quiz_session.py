@@ -9,7 +9,7 @@ from typing import Optional, List
 from rich.panel import Panel
 from rich.table import Table
 from rich.box import ROUNDED
-from vocab.models import Word, SRSGrade, SessionStats
+from vocab.models import Word, SRSGrade, SessionStats, CardState
 from vocab.srs import SRSEngine, RecurrentSessionQueue
 from vocab.db import Database
 from vocab.ui.theme import console, render_header, pause_prompt
@@ -47,7 +47,7 @@ def run_quiz_session(
             console.print(
                 f"[bold cyan]⏰ Recommended Next Session:[/bold cyan] "
                 f"[bold bright_white]{next_session['full_label']}[/bold bright_white] "
-                f"[dim]({next_session['card_count']} cards mature, ~{next_session['accumulated_capacity']} brain capacity)[/dim]\n"
+                f"[dim]({next_session['card_count']} cards mature, ~{next_session['accumulated_capacity']} workload points)[/dim]\n"
             )
         pause_prompt()
         return stats
@@ -68,7 +68,7 @@ def run_quiz_session(
 
     if placeholder_count > 0 and due_count == 0 and new_count == 0:
         next_session = db.get_recommended_next_session(group_id=group_id)
-        rec_info = f" [dim](next optimal session: [bold white]{next_session['short_label']}[/bold white])[/dim]" if next_session else ""
+        rec_info = f" [dim](suggested review batch: [bold white]{next_session['short_label']}[/bold white])[/dim]" if next_session else ""
         console.print(f"[bold cyan]ℹ All caught up! Practicing {placeholder_count} upcoming cards with closest due times.[/bold cyan]{rec_info}\n")
     else:
         parts = []
@@ -82,7 +82,7 @@ def run_quiz_session(
         if new_count > 0 and (due_count > 0 or placeholder_count > 0):
             parts_str += " • [bold green]alternating[/bold green]"
         next_session = db.get_recommended_next_session(group_id=group_id)
-        opt_info = f" [dim](optimal full session: [bold white]{next_session['short_label']}[/bold white])[/dim]" if next_session and not next_session.get("is_optimal_now") else ""
+        opt_info = f" [dim](suggested review batch: [bold white]{next_session['short_label']}[/bold white])[/dim]" if next_session and not next_session.get("is_optimal_now") else ""
         console.print(f"[dim cyan]ℹ Loaded {parts_str}{opt_info}[/dim cyan]\n")
     time.sleep(0.4)
 
@@ -126,7 +126,7 @@ def run_quiz_session(
             recurrent_count=recurrent_count
         )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         selected_num = None
         while selected_num is None:
@@ -149,11 +149,11 @@ def run_quiz_session(
         if selected_num is None:
             break
 
-        elapsed_sec = time.time() - start_time
+        elapsed_sec = time.perf_counter() - start_time
 
         if selected_num == correct_index:
             # Correct!
-            grade = SRSGrade.EASY if elapsed_sec < 3.0 else SRSGrade.GOOD
+            grade = SRSGrade.GOOD
             console.print(f"\n[bold green]✓ CORRECT! '{current_word.word}'[/bold green]")
             if current_word.example:
                 console.print(f"[dim italic]\"{current_word.example}\"[/dim italic]")
@@ -172,18 +172,16 @@ def run_quiz_session(
         is_outlier = (elapsed_sec > max_tt)
         effective_tt = 0.0 if is_outlier else elapsed_sec
 
-        # Calculate SRS update with decision time
-        updated_word, scheduled_days = SRSEngine.calculate_next_state(
-            current_word, grade, thought_time_seconds=effective_tt
-        )
-        db.update_word(updated_word)
+        # Recognition is practice-only: preserve the free-recall schedule.
+        updated_word = current_word
+        scheduled_days = current_word.interval_days
         db.log_review(
             word_id=current_word.id,
             grade=int(grade),
             review_mode="quiz",
             scheduled_days=scheduled_days,
             elapsed_seconds=elapsed_sec,
-            thought_time_seconds=effective_tt,
+            thought_time_seconds=elapsed_sec,
             card_state=current_word.state
         )
 
@@ -201,7 +199,7 @@ def run_quiz_session(
         stats.total_reviews += 1
         if is_outlier:
             stats.outlier_thought_count += 1
-            console.print(f"  [dim yellow]⏱ Quiz response: {elapsed_sec:.1f}s (errand outlier > {max_tt:.0f}s — excluded from latency stats)[/dim yellow]")
+            console.print(f"  [dim yellow]⏱ Quiz response: {elapsed_sec:.1f}s (timing outlier > {max_tt:.0f}s — excluded from latency stats)[/dim yellow]")
         elif effective_tt > 0.0:
             stats.total_thought_time += effective_tt
             stats.timed_reviews += 1
@@ -213,15 +211,15 @@ def run_quiz_session(
                 stats.hesitant_count += 1
 
         if is_mastered:
-            console.print(f"\n[bold bright_green]🏆 MASTERED! '{current_word.word}' has achieved permanent mastery and will never appear in reviews again![/bold bright_green]")
+            console.print(f"\n[bold bright_green]🏆 MASTERED! '{current_word.word}' is retired from review.[/bold bright_green]")
         elif was_requeued:
             console.print("[dim red]↻ Missed! Added back to queue to re-test you in a moment.[/dim red]")
         else:
             int_str = SRSEngine.format_interval(scheduled_days)
             if getattr(current_word, "is_placeholder", False) and grade in (SRSGrade.GOOD, SRSGrade.EASY):
-                console.print(f"[bold bright_cyan]★ Memory compounded ahead of time: interval extended to {int_str}[/bold bright_cyan]")
+                console.print(f"[bold bright_cyan]✓ Practice recorded; recall schedule unchanged[/bold bright_cyan]")
             else:
-                console.print(f"[dim green]✓ Next review scheduled in {int_str}[/dim green]")
+                console.print(f"[dim green]✓ Practice recorded; recall schedule unchanged[/dim green]")
 
         time.sleep(1.0)
 
@@ -255,7 +253,7 @@ def _render_quiz_summary(
     table.add_column("Value", style="bold white", justify="right")
 
     table.add_row("Total Questions Answered:", str(stats.total_reviews))
-    table.add_row("Unique Words Mastered:", str(stats.unique_words))
+    table.add_row("Unique words completed:", str(stats.unique_words))
     table.add_row("[green]✓ Correct Answers:[/green]", f"[bold green]{stats.good_count + stats.easy_count}[/bold green]")
     table.add_row("[red]✕ Incorrect (Re-drilled):[/red]", f"[bold red]{stats.again_count}[/bold red]")
     if stats.mastered_count > 0:
@@ -271,16 +269,16 @@ def _render_quiz_summary(
         q_tier = quality_result["quality_tier"]
         tier_color = "bright_green" if q_pct >= 100 else ("yellow" if q_pct >= 80 else "red")
         table.add_section()
-        table.add_row("Learning Quality Rating:", f"[{tier_color} bold]{q_pct:.0f}% ({q_tier})[/{tier_color} bold]")
+        table.add_row("Workload score (heuristic):", f"[{tier_color} bold]{q_pct:.0f}% ({q_tier})[/{tier_color} bold]")
         table.add_row(
-            "Mastery Reps / Word:",
-            f"{quality_result['avg_repetitions']:.2f} [dim](expected {quality_result['avg_expected_repetitions']:.2f} for avg diff {quality_result['avg_difficulty']:.1f})[/dim]"
+            "Attempts per word:",
+            f"{quality_result['avg_repetitions']:.2f} [dim](heuristic baseline {quality_result['avg_expected_repetitions']:.2f} for avg diff {quality_result['avg_difficulty']:.1f})[/dim]"
         )
-        table.add_row("Session Cognitive Load:", f"{quality_result['total_load']} cap points")
+        table.add_row("Session workload:", f"{quality_result['total_load']} workload points")
         if tuning_result and tuning_result.get("delta") != 0:
             d_str = f"+{tuning_result['delta']}" if tuning_result['delta'] > 0 else str(tuning_result['delta'])
             d_color = "bright_green" if tuning_result['delta'] > 0 else "yellow"
-            table.add_row("Adaptive Capacity Limit:", f"{tuning_result['new_threshold']} ([{d_color}]{d_str}[/{d_color}])")
+            table.add_row("Workload budget (heuristic):", f"{tuning_result['new_threshold']} ([{d_color}]{d_str}[/{d_color}])")
 
     console.print(table)
     pause_prompt()

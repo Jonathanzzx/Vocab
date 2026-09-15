@@ -23,7 +23,7 @@ class Database:
             self.db_path = os.path.abspath(db_path)
 
         self._init_db()
-        self.cleanup_thought_time_outliers()
+        # Filter timing outliers when reporting; preserve raw historical records.
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -922,14 +922,17 @@ class Database:
         card_state: Optional[str] = None,
         now: Optional[datetime] = None
     ) -> int:
-        now = now or datetime.now()  # Use local time for hour_of_day and day_of_week
-        now_iso = now.isoformat()
-        hour = now.hour
-        dow = now.weekday()
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.astimezone()
+        now_iso = now.astimezone(timezone.utc).isoformat()
+        local_time = now.astimezone()
+        hour = local_time.hour
+        dow = local_time.weekday()
         if card_state is None:
             card_state = "learning" if scheduled_days <= 1.0 else "review"
         max_tt = self.get_max_thought_time_threshold()
-        cleaned_tt = thought_time_seconds if (0.0 < thought_time_seconds <= max_tt) else 0.0
+        cleaned_tt = thought_time_seconds if is_valid_thought_time(thought_time_seconds, float("inf")) else 0.0
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -1071,6 +1074,9 @@ class Database:
                     or recalc.step != orig_step
                     or recalc.reps != orig_reps
                     or recalc.lapses != orig_lapses
+                    or recalc.due_date != w.due_date
+                    or recalc.interval_days != w.interval_days
+                    or recalc.ease_factor != w.ease_factor
                     or abs(recalc.stability - orig_stability) > 0.01
                     or abs(recalc.avg_thought_time - w.avg_thought_time) > 0.01
                     or abs(recalc.last_thought_time - w.last_thought_time) > 0.01
@@ -1129,7 +1135,7 @@ class Database:
                 SELECT rl.grade, COUNT(*) as cnt
                 FROM review_logs rl
                 JOIN words w ON rl.word_id = w.id
-                WHERE rl.reviewed_at >= ?
+                WHERE rl.reviewed_at >= ? AND rl.review_mode NOT IN ('quiz', 'introduction')
             """
             log_params: List[Any] = [seven_days_ago]
             if group_id is not None:
@@ -1140,7 +1146,7 @@ class Database:
 
             recent_grades = {r["grade"]: r["cnt"] for r in cursor.fetchall()}
             total_recent_reviews = sum(recent_grades.values())
-            recent_success = recent_grades.get(int(SRSGrade.GOOD), 0) + recent_grades.get(int(SRSGrade.EASY), 0)
+            recent_success = sum(recent_grades.get(int(g), 0) for g in (SRSGrade.HARD, SRSGrade.GOOD, SRSGrade.EASY))
             retention_rate = (recent_success / total_recent_reviews * 100.0) if total_recent_reviews > 0 else 0.0
 
             # Daily activity streak
@@ -1441,14 +1447,14 @@ class Database:
                     COUNT(*) as reviews,
                     SUM(rl.elapsed_seconds) as total_active_seconds,
                     AVG(CASE WHEN rl.thought_time_seconds > 0 AND rl.thought_time_seconds <= ? THEN rl.thought_time_seconds ELSE NULL END) as avg_thought_time,
-                    SUM(CASE WHEN rl.grade IN (3, 4) THEN 1 ELSE 0 END) as success_count,
+                    SUM(CASE WHEN rl.grade IN (2, 3, 4) THEN 1 ELSE 0 END) as success_count,
                     SUM(CASE WHEN rl.card_state IN ('new', 'learning', 'relearning') OR (rl.card_state IS NULL AND rl.scheduled_days <= 1.0) THEN 1 ELSE 0 END) as new_learning_count,
-                    SUM(CASE WHEN (rl.card_state IN ('new', 'learning', 'relearning') OR (rl.card_state IS NULL AND rl.scheduled_days <= 1.0)) AND rl.grade IN (3, 4) THEN 1 ELSE 0 END) as new_learning_success,
+                    SUM(CASE WHEN (rl.card_state IN ('new', 'learning', 'relearning') OR (rl.card_state IS NULL AND rl.scheduled_days <= 1.0)) AND rl.grade IN (2, 3, 4) THEN 1 ELSE 0 END) as new_learning_success,
                     SUM(CASE WHEN rl.card_state = 'review' OR (rl.card_state IS NULL AND rl.scheduled_days > 1.0) THEN 1 ELSE 0 END) as review_count,
-                    SUM(CASE WHEN (rl.card_state = 'review' OR (rl.card_state IS NULL AND rl.scheduled_days > 1.0)) AND rl.grade IN (3, 4) THEN 1 ELSE 0 END) as review_success
+                    SUM(CASE WHEN (rl.card_state = 'review' OR (rl.card_state IS NULL AND rl.scheduled_days > 1.0)) AND rl.grade IN (2, 3, 4) THEN 1 ELSE 0 END) as review_success
                 FROM review_logs rl
                 JOIN words w ON rl.word_id = w.id
-                WHERE rl.reviewed_at >= ?
+                WHERE rl.reviewed_at >= ? AND rl.review_mode NOT IN ('quiz', 'introduction')
             """
             params: List[Any] = [max_tt, start_date]
             if group_id is not None:
@@ -1539,30 +1545,10 @@ class Database:
             review_succ = sum(m.get("review_success", 0) for m in matching)
             review_ret_rate = round((review_succ / review_revs * 100.0), 1) if review_revs > 0 else None
 
-            # Determine Cognitive Status:
-            # Cognitive distinction: Low retrieval rate upon newly learning words
-            # is a normal property of initial encoding (desirable difficulty), NOT tiredness.
-            if total_revs == 0:
-                state_label = "[dim]No activity[/dim]"
-            elif review_revs >= 3 and review_ret_rate is not None and review_ret_rate >= 85 and avg_tt <= 4.5:
-                state_label = "[bold green]Peak Focus ★[/bold green]"
-            elif review_revs < 3 and ret_rate >= 85 and avg_tt <= 4.5:
-                state_label = "[bold green]Peak Focus ★[/bold green]"
-            elif (review_ret_rate is not None and review_ret_rate >= 75) or (review_revs < 3 and ret_rate >= 75):
-                state_label = "[cyan]Steady Recall ✓[/cyan]"
-            elif new_learning_revs > 0 and (review_revs == 0 or (review_ret_rate is not None and review_ret_rate >= 70) or new_learning_revs >= review_revs):
-                # Low overall retrieval rate is driven by newly learned words in initial acquisition, not tiredness
-                state_label = "[bold cyan]New Acquisition ✎[/bold cyan]"
-            elif (review_revs >= 3 and review_ret_rate is not None and review_ret_rate < 70) or (review_revs >= 3 and avg_tt > 7.0):
-                # Genuine cognitive fatigue: established cards the user previously graduated have poor recall or severe hesitation
-                state_label = "[yellow]Fatigue Zone ▲[/yellow]"
-            elif avg_tt > 7.0 or ret_rate < 70:
-                if new_learning_revs > 0:
-                    state_label = "[bold cyan]New Acquisition ✎[/bold cyan]"
-                else:
-                    state_label = "[yellow]Fatigue Zone ▲[/yellow]"
-            else:
-                state_label = "[white]Normal[/white]"
+            # Describe observations without diagnosing fatigue or focus.
+            state_label = "[dim]No activity[/dim]" if not total_revs else (
+                "[dim]Small sample[/dim]" if total_revs < 20 else "[cyan]Observed activity[/cyan]"
+            )
 
             results.append({
                 "name": p["name"],

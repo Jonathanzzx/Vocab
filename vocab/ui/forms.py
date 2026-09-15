@@ -321,9 +321,9 @@ def add_word_form(
             needs_chinese=needs_chinese
         )
 
-        # Dispatch background existence lookup for typo detection
+        # Validate against the dictionary, not the row we just inserted.
         fut = BackgroundEnricher._get_executor().submit(
-            DictionaryService.check_word_exists, word_text, 3.5, db
+            DictionaryService.check_word_exists, word_text, 3.5
         )
         pending_validations.append((last_word_id, word_text, fut))
 
@@ -672,7 +672,7 @@ def prompt_state_filter(current_state: Optional[str] = None) -> Any:
         ("2", "learning", "▲ Learning", "Cards in active intra-day acquisition"),
         ("3", "review", "✓ Review", "Graduated cards in regular spaced repetition"),
         ("4", "relearning", "! Relearning", "Cards with recent lapses undergoing recovery"),
-        ("5", "mastered", "🏆 Mastered", "Retired cards that have achieved permanent mastery"),
+        ("5", "mastered", "🏆 Mastered", "Cards excluded from review by the user"),
     ]
 
     for key, st, label, desc in state_choices:
@@ -1057,7 +1057,7 @@ def _inspect_word_dialog(db: Database, word: Word) -> None:
         console.print()
         console.print(Panel(info, box=ROUNDED, border_style="bright_cyan", title=f"[bold bright_white]─── Word Card: {word.word} ───[/bold bright_white]"))
 
-        retire_action = "[bold yellow]\\[r][/bold yellow] [white]Reactivate for review[/white]" if word.state == "mastered" else "[bold yellow]\\[m][/bold yellow] [white]Mark as Mastered[/white]"
+        retire_action = "[bold yellow]\\[r][/bold yellow] [white]Reactivate for review[/white]" if word.state == "mastered" else "[bold yellow]\\[m][/bold yellow] [white]Retire from review[/white]"
         console.print("\n[bold yellow]Actions:[/bold yellow]")
         console.print(f"  [bold yellow]\\[e][/bold yellow] [white]Edit word[/white]       [bold yellow]\\[d][/bold yellow] [white]Delete word[/white]     {retire_action}     [bold yellow]\\[l][/bold yellow] [white]Auto-enrich (Phonics/Chinese)[/white]     [bold yellow]\\[b][/bold yellow] [white]Back[/white]\n")
 
@@ -1079,7 +1079,7 @@ def _inspect_word_dialog(db: Database, word: Word) -> None:
             refreshed = db.get_word_by_id(word.id)
             if refreshed:
                 word = refreshed
-            console.print(f"[bold bright_green]🏆 Word '{word.word}' marked as Mastered and retired from review sessions.[/bold bright_green]")
+            console.print(f"[bold bright_green]🏆 Word '{word.word}' retired from review sessions.[/bold bright_green]")
             time.sleep(0.8)
         elif action == "r":
             db.set_word_mastery(word.id, False)

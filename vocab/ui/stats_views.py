@@ -8,7 +8,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.columns import Columns
 from rich.box import ROUNDED, SIMPLE_HEAVY
-from vocab.ui.theme import console
+from vocab.ui.theme import console, metric_panel, metric_grid
 from vocab.models import Group, Word
 
 
@@ -41,55 +41,31 @@ def render_stats_dashboard(
 
     avg_thought = latency_stats.get("overall_avg_thought_time", 0.0) if latency_stats else 0.0
 
-    # 1. Top metric cards
-    card_due = Panel(
-        f"[bold bright_red]{due_count}[/bold bright_red]\n[dim]Ready[/dim]",
-        title="[bold bright_red]● Due[/bold bright_red]",
-        border_style="bright_red",
-        box=ROUNDED,
-    )
-    card_streak = Panel(
-        f"[bold bright_yellow]{streak_days}d[/bold bright_yellow]\n[dim]Days[/dim]",
-        title="[bold bright_yellow]★ Streak[/bold bright_yellow]",
-        border_style="bright_yellow",
-        box=ROUNDED,
-    )
-    card_retention = Panel(
-        f"[bold bright_green]{retention_rate:.1f}%[/bold bright_green]\n[dim]7-Day[/dim]",
-        title="[bold bright_green]✓ Rate[/bold bright_green]",
-        border_style="bright_green",
-        box=ROUNDED,
-    )
-    card_thought = Panel(
-        f"[bold bright_magenta]{avg_thought:.1f}s[/bold bright_magenta]\n[dim]Speed[/dim]",
-        title="[bold bright_magenta]⏱ Latency[/bold bright_magenta]",
-        border_style="bright_magenta",
-        box=ROUNDED,
-    )
-    card_total = Panel(
-        f"[bold bright_cyan]{total_words}[/bold bright_cyan]\n[dim]Total[/dim]",
-        title="[bold bright_cyan]■ Cards[/bold bright_cyan]",
-        border_style="bright_cyan",
-        box=ROUNDED,
-    )
-
-    console.print(Columns([card_due, card_streak, card_retention, card_thought, card_total], equal=True))
+    attempts = overall_stats.get("total_recent_reviews", 0)
+    console.print(metric_grid([
+        metric_panel(due_count, "Due + new", "Ready to study"),
+        metric_panel(f"{streak_days} days", "Streak", "Active days"),
+        metric_panel(f"{retention_rate:.1f}%" if attempts else "—", "Recall · 7 days", f"{attempts} attempts"),
+        metric_panel(f"{avg_thought:.1f}s" if avg_thought else "—", "Response time", "Recorded mean"),
+        metric_panel(total_words, "Library", "Words"),
+    ], console.width))
+    console.print("[dim]Recall = Hard, Good or Easy / rated recall attempts. Quizzes and introductions are excluded.[/dim]")
     console.print()
 
     # 2. Circadian Day Periods & Optimal Study Windows
     if circadian_periods:
         circ_table = Table(
             box=ROUNDED,
-            border_style="bright_cyan",
+            border_style="dim",
             expand=True,
-            title="[bold bright_white]─── Active Time Periods & Circadian Performance ───[/bold bright_white]"
+            title="[bold bright_white]─── Activity by time of day ───[/bold bright_white]"
         )
         circ_table.add_column("Time Period", style="bold white", width=24)
         circ_table.add_column("Active Time", justify="right", style="cyan", width=14)
         circ_table.add_column("Reviews", justify="right", width=14)
         circ_table.add_column("Avg Latency", justify="right", style="magenta", width=14)
-        circ_table.add_column("Retention Rate", justify="right", style="green", width=18)
-        circ_table.add_column("Cognitive Status", justify="center", width=22)
+        circ_table.add_column("Recall rate", justify="right", style="green", width=18)
+        circ_table.add_column("Sample", justify="center", width=22)
 
         for p in circadian_periods:
             time_str = f"{p['active_minutes']} mins" if p['active_minutes'] > 0 else "[dim]0m[/dim]"
@@ -126,7 +102,7 @@ def render_stats_dashboard(
                 p['state_label']
             )
         console.print(circ_table)
-        console.print("[dim italic]  ℹ Cognitive analysis note: Low retrieval on newly learned words reflects natural memory encoding, not tiredness or fatigue.[/dim italic]")
+        console.print("[dim italic]  ℹ Observational data: task mix, item difficulty and sample size vary. These patterns do not measure focus or fatigue.[/dim italic]")
         console.print()
 
     # 3. 24-Hour Activity Visualizer
@@ -157,7 +133,7 @@ def render_stats_dashboard(
             f"{chart_line}\n[dim]{labels_line}[/dim]\n[dim]Hours: 00:00 (Midnight) ────────────────── 12:00 (Noon) ────────────────── 23:00 (Night)[/dim]",
             title="[bold bright_white]─── 24-Hour Review Distribution Heatmap ───[/bold bright_white]",
             box=ROUNDED,
-            border_style="bright_blue"
+            border_style="dim"
         )
         console.print(chart_panel)
         console.print()
@@ -171,19 +147,19 @@ def render_stats_dashboard(
 
         lat_table = Table(
             box=ROUNDED,
-            border_style="bright_magenta",
+            border_style="dim",
             expand=True,
-            title="[bold bright_white]─── Cognitive Recall Latency & Fluency Distribution ───[/bold bright_white]"
+            title="[bold bright_white]─── Recorded response times ───[/bold bright_white]"
         )
-        lat_table.add_column("Recall Fluency", style="bold", width=24)
+        lat_table.add_column("Time range", style="bold", width=24)
         lat_table.add_column("Count", justify="right", width=10)
         lat_table.add_column("Percentage", justify="right", width=12)
         lat_table.add_column("Visual Distribution", width=30)
 
         categories = [
-            ("✦ Fluent Recall (<3s)", c_fluent, "bright_green"),
-            ("✓ Steady Retrieval (3-7s)", c_steady, "bright_cyan"),
-            ("▲ High Hesitation (>7s)", c_hesitant, "bright_yellow"),
+            ("✦ Up to 3 seconds", c_fluent, "bright_green"),
+            ("✓ 3 to 7 seconds", c_steady, "bright_cyan"),
+            ("▲ Over 7 seconds", c_hesitant, "bright_yellow"),
         ]
 
         for label, count, color in categories:
@@ -195,7 +171,7 @@ def render_stats_dashboard(
         if latency_stats.get("count_outliers", 0) > 0:
             c_out = latency_stats["count_outliers"]
             max_tt = latency_stats.get("max_thought_time_threshold", 30.0)
-            console.print(f"[dim]  ⊘ Note: {c_out} errand distraction outlier(s) (>{max_tt:.0f}s) were excluded from latency averages.[/dim]")
+            console.print(f"[dim]  ⊘ Note: {c_out} timing outlier(s) (>{max_tt:.0f}s) were excluded from latency averages.[/dim]")
         console.print()
 
         # Hesitation Watchlist
@@ -222,15 +198,15 @@ def render_stats_dashboard(
                     str(hw.lapses)
                 )
             console.print(h_table)
-            console.print("[dim italic]  Adaptive note: The SRS engine automatically scales back intervals and prioritizes review for hesitant words.[/dim italic]")
+            console.print("[dim italic]  Timing includes reading and input. It does not change the schedule or diagnose memory strength.[/dim italic]")
             console.print()
 
     # 5. Maturity Distribution Bar
     dist_table = Table(
         box=ROUNDED,
-        border_style="bright_cyan",
+        border_style="dim",
         expand=True,
-        title="[bold bright_white]─── Memory Maturity Distribution ───[/bold bright_white]"
+        title="[bold bright_white]─── Review interval distribution ───[/bold bright_white]"
     )
     dist_table.add_column("Stage", style="bold", width=22)
     dist_table.add_column("Count", justify="right", width=10)
@@ -243,7 +219,7 @@ def render_stats_dashboard(
         ("▲ Learning / Lapsed", learning_count, "bright_yellow"),
         ("◆ Young (<21 days)", young_count, "bright_cyan"),
         ("★ Mature (≥21 days)", mature_count, "bright_green"),
-        ("🏆 Mastered (Retired)", mastered_count, "green"),
+        ("🏆 Retired from review", mastered_count, "green"),
     ]
 
     for label, count, color in stages:
@@ -274,14 +250,14 @@ def render_stats_dashboard(
     if groups:
         grp_table = Table(
             box=ROUNDED,
-            border_style="bright_blue",
+            border_style="dim",
             expand=True,
             title="[bold bright_white]─── Vocabulary Decks Breakdown ───[/bold bright_white]"
         )
         grp_table.add_column("Deck Name", style="bold white")
         grp_table.add_column("Words", justify="right", style="cyan")
         grp_table.add_column("Due Now", justify="right", style="red")
-        grp_table.add_column("Progress", width=25)
+        grp_table.add_column("Not currently due", width=25)
 
         for g in groups:
             due = g.due_count

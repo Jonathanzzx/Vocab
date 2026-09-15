@@ -308,7 +308,7 @@ class SessionStats:
     def retention_rate(self) -> float:
         if self.total_reviews == 0:
             return 0.0
-        success = self.good_count + self.easy_count
+        success = self.hard_count + self.good_count + self.easy_count
         return (success / self.total_reviews) * 100.0
 
     @property

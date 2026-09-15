@@ -1,5 +1,5 @@
 """
-Interactive Vocabulary Proficiency Test & Benchmark Session.
+Interactive Vocabulary practice check Session.
 """
 from __future__ import annotations
 import time
@@ -19,7 +19,7 @@ from vocab.ui.theme import console, render_header, pause_prompt
 def run_test_session(db: Database, group_id: Optional[int] = None) -> None:
     """Main menu and loop for Vocabulary Proficiency Tests & Benchmarks."""
     while True:
-        render_header("Vocabulary Proficiency Test & Benchmark")
+        render_header("Vocabulary practice check")
 
         table = Table(
             box=ROUNDED,
@@ -40,9 +40,9 @@ def run_test_session(db: Database, group_id: Optional[int] = None) -> None:
         )
         table.add_row(
             "[2]",
-            "CEFR Proficiency Benchmark",
+            "Leveled vocabulary practice",
             "A1 → C2 Leveled Battery",
-            "Progressive 12-question staircase to evaluate CEFR tier & vocab size"
+            "12 practice items grouped by difficulty; no proficiency certification"
         )
         table.add_row(
             "[3]",
@@ -55,7 +55,7 @@ def run_test_session(db: Database, group_id: Optional[int] = None) -> None:
             "[4]",
             "View Test History & Progression",
             "Database Analytics",
-            "Review past scores, estimated vocabulary growth, and speed trends"
+            "Review past practice scores, item counts and response times"
         )
 
         console.print(table)
@@ -71,7 +71,7 @@ def run_test_session(db: Database, group_id: Optional[int] = None) -> None:
         elif choice == "1":
             _execute_test(db, group_id, test_type="opentdb", title="General Vocabulary Test (OpenTDB)")
         elif choice == "2":
-            _execute_test(db, group_id, test_type="cefr_benchmark", title="CEFR Leveled Benchmark Battery")
+            _execute_test(db, group_id, test_type="cefr_benchmark", title="Vocabulary item check")
         elif choice == "3":
             _execute_test(db, group_id, test_type="datamuse_synonym", title="Synonym & Semantic Challenge")
         elif choice == "4":
@@ -135,7 +135,7 @@ def _execute_test(
             title=f"[bold bright_white] Q{idx} of {total_q} [/bold bright_white]"
         ))
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         user_choice = None
 
         while user_choice is None:
@@ -155,12 +155,12 @@ def _execute_test(
             console.print("\n[yellow]Test stopped early.[/yellow]")
             break
 
-        elapsed = time.time() - start_time
+        elapsed = time.perf_counter() - start_time
         is_outlier = (elapsed > max_tt)
 
         if is_outlier:
             outlier_count += 1
-            console.print(f"  [dim yellow]⏱ Response time: {elapsed:.1f}s (errand outlier > {max_tt:.0f}s excluded from speed stats)[/dim yellow]")
+            console.print(f"  [dim yellow]⏱ Response time: {elapsed:.1f}s (timing outlier > {max_tt:.0f}s excluded from speed stats)[/dim yellow]")
         else:
             timed_seconds_list.append(elapsed)
 
@@ -187,7 +187,7 @@ def _execute_test(
 
     # If stopped early with very few questions, ask user whether to save partial attempt
     if len(answered_questions) < 4:
-        console.print(f"\n[dim yellow]⚠ Only {len(answered_questions)} question(s) answered (minimum 5 required for a reliable CEFR benchmark).[/dim yellow]")
+        console.print(f"\n[dim yellow]⚠ Only {len(answered_questions)} question(s) answered (small samples give imprecise scores).[/dim yellow]")
         try:
             save_ans = input("Do you want to save this partial attempt to history? [y/N] > ").strip().lower()
         except (KeyboardInterrupt, EOFError):
@@ -247,13 +247,13 @@ def _render_test_results_summary(
     prev_test: Optional[Any]
 ) -> None:
     """Renders the comprehensive results and evaluation panel."""
-    render_header("Vocabulary Benchmark Results")
+    render_header("Vocabulary check results")
 
     summary_table = Table(
         box=ROUNDED,
         border_style="bright_magenta",
         expand=True,
-        title="[bold bright_white]─── ✦ Proficiency Assessment ✦ ───[/bold bright_white]"
+        title="[bold bright_white]─── ✦ Practice results ✦ ───[/bold bright_white]"
     )
     summary_table.add_column("Metric", style="bold cyan", width=28)
     summary_table.add_column("Your Result", style="bold white", justify="right")
@@ -265,15 +265,9 @@ def _render_test_results_summary(
         f"[{score_color} bold]{evaluation['correct_count']} / {evaluation['total_questions']} ({score_pct:.1f}%)[/{score_color} bold]"
     )
 
-    summary_table.add_row(
-        "Estimated CEFR Level:",
-        f"[bold bright_green]{evaluation['cefr_label']}[/bold bright_green]"
-    )
-
-    summary_table.add_row(
-        "Estimated Vocabulary Size:",
-        f"[bold bright_cyan]~{evaluation['estimated_vocab_size']:,} words[/bold bright_cyan]"
-    )
+    interval = evaluation.get("accuracy_interval")
+    if interval:
+        summary_table.add_row("95% Wilson interval:", f"{interval[0]:.1%} – {interval[1]:.1%}")
 
     if avg_speed > 0:
         summary_table.add_row(
@@ -287,29 +281,8 @@ def _render_test_results_summary(
             f"[dim]{outlier_count} question(s) > 30s[/dim]"
         )
 
-    # Progress Delta Comparison
-    if prev_test and evaluation.get("is_reliable", True) and prev_test.total_questions >= 5:
-        delta_score = score_pct - prev_test.score_pct
-        delta_sign = "+" if delta_score >= 0 else ""
-        d_color = "bright_green" if delta_score >= 0 else "yellow"
-        delta_vocab = evaluation['estimated_vocab_size'] - prev_test.estimated_vocab_size
-        v_sign = "+" if delta_vocab >= 0 else ""
-
-        summary_table.add_section()
-        summary_table.add_row(
-            "Previous Benchmark Score:",
-            f"{prev_test.score_pct:.1f}% ({prev_test.cefr_level})  →  [{d_color}]{delta_sign}{delta_score:.1f}%[/{d_color}]"
-        )
-        summary_table.add_row(
-            "Vocabulary Growth Delta:",
-            f"~{prev_test.estimated_vocab_size:,}  →  [{d_color}]{v_sign}{delta_vocab:,} words[/{d_color}]"
-        )
-    elif prev_test:
-        summary_table.add_section()
-        summary_table.add_row(
-            "Previous Attempt:",
-            f"{prev_test.score_pct:.1f}% ({prev_test.cefr_level}, ~{prev_test.estimated_vocab_size:,} words) [dim]({prev_test.total_questions}Q)[/dim]"
-        )
+    if prev_test:
+        summary_table.add_row("Previous practice score:", f"{prev_test.score_pct:.1f}% ({prev_test.total_questions} items)")
 
     console.print(summary_table)
     console.print()
@@ -319,7 +292,7 @@ def _render_test_results_summary(
             f"[bold yellow]⚠ {evaluation['sample_warning']}[/bold yellow]",
             box=ROUNDED,
             border_style="yellow",
-            title="[bold yellow] Reliability Advisory [/bold yellow]"
+            title="[bold yellow] How to read this score [/bold yellow]"
         ))
         console.print()
 
@@ -441,7 +414,7 @@ def _render_test_history_view(db: Database) -> None:
         f"[dim]Total Tests:[/dim] [bold bright_cyan]{tot}[/bold bright_cyan]",
         f"[dim]Average Score:[/dim] [bold yellow]{avg_sc:.1f}%[/bold yellow]",
         f"[dim]Best Score:[/dim] [bold bright_green]{best_sc:.1f}%[/bold bright_green]",
-        f"[dim]Certified Level:[/dim] [bold bright_magenta]{latest_level} ({latest_vocab} words)[/bold bright_magenta]"
+        f"[dim]Assessment:[/dim] [bold bright_magenta]Practice only[/bold bright_magenta]"
     )
 
     console.print(Panel(
@@ -463,15 +436,15 @@ def _render_test_history_view(db: Database) -> None:
     hist_table.add_column("Date / Time", style="dim", width=18)
     hist_table.add_column("Test Mode", style="bold white", width=24)
     hist_table.add_column("Score", justify="center", width=16)
-    hist_table.add_column("CEFR Level", justify="center", style="bold green", width=16)
-    hist_table.add_column("Est. Vocab", justify="right", style="cyan", width=14)
+    hist_table.add_column("Assessment", justify="center", style="bold green", width=16)
+    hist_table.add_column("Items", justify="right", style="cyan", width=14)
     hist_table.add_column("Avg Speed", justify="right", style="magenta", width=12)
 
     for item in history:
         date_str = item.tested_at[:16].replace("T", " ")
         mode_label = (
             "OpenTDB General" if item.test_type == "opentdb"
-            else ("CEFR Benchmark" if item.test_type == "cefr_benchmark" else "Synonym Drill")
+            else ("Vocabulary check" if item.test_type == "cefr_benchmark" else "Synonym Drill")
         )
         is_prelim = (item.total_questions < 5)
         prelim_tag = " [dim yellow]*(prelim)[/dim yellow]" if is_prelim else ""
@@ -482,8 +455,8 @@ def _render_test_history_view(db: Database) -> None:
             date_str,
             mode_label,
             score_badge,
-            cefr_display,
-            f"~{item.estimated_vocab_size:,}",
+            "Practice only",
+            str(item.total_questions),
             speed_str
         )
 

@@ -671,173 +671,29 @@ class VocabTestService:
         return result
 
     @classmethod
-    def estimate_proficiency(
-        cls,
-        questions: List[TestQuestion],
-        user_correct: List[bool],
-        avg_response_time: float = 0.0
-    ) -> Dict[str, Any]:
-        """
-        Calculates CEFR proficiency level, estimated English vocabulary size,
-        and qualitative analysis from test performance with strict psychometric validity.
-        """
-        if not questions:
-            return {
-                "score_pct": 0.0,
-                "weighted_pct": 0.0,
-                "correct_count": 0,
-                "total_questions": 0,
-                "cefr_level": "A1",
-                "cefr_label": "A1 - Beginner (Foundation)",
-                "estimated_vocab_size": 800,
-                "speed_rating": "Untimed",
-                "feedback": "No questions answered.",
-                "level_breakdown": {},
-                "is_reliable": False,
-                "sample_warning": "No questions answered."
-            }
-
+    def estimate_proficiency(cls, questions, user_correct, avg_response_time=0.0):
+        """Report observed item accuracy, without inferring CEFR or vocabulary size."""
+        from vocab.measurement import wilson_interval
+        if len(questions) != len(user_correct):
+            raise ValueError("Each question must have one scored response")
         total = len(questions)
-        correct_count = sum(1 for c in user_correct if c)
-        raw_pct = (correct_count / total) * 100.0
-
-        # Group performance by CEFR tier
-        level_stats: Dict[str, Dict[str, int]] = {
-            tier: {"correct": 0, "total": 0} for tier in CEFR_LEVELS
-        }
-        for q, is_corr in zip(questions, user_correct):
-            tier = q.cefr_level.upper() if q.cefr_level and q.cefr_level.upper() in level_stats else "B1"
-            level_stats[tier]["total"] += 1
-            if is_corr:
-                level_stats[tier]["correct"] += 1
-
-        tested_tiers = [t for t in CEFR_LEVELS if level_stats[t]["total"] > 0]
-        max_tested_tier = tested_tiers[-1] if tested_tiers else "A1"
-        min_tested_tier = tested_tiers[0] if tested_tiers else "A1"
-        max_tier_idx = CEFR_LEVELS.index(max_tested_tier)
-        min_tier_idx = CEFR_LEVELS.index(min_tested_tier)
-
-        # 1. Calculate Estimated Vocabulary Size using Nation's Frequency Band Sampling Model
-        # Baseline recognition floor
-        est_vocab = 500.0
-
-        for idx, tier in enumerate(CEFR_LEVELS):
-            band_size = TIER_BAND_WORDS[tier]
-            t_total = level_stats[tier]["total"]
-            t_correct = level_stats[tier]["correct"]
-
-            if t_total > 0:
-                ratio = t_correct / t_total
-                est_vocab += band_size * ratio
-            else:
-                if idx < min_tier_idx:
-                    # Untested tiers lower than lowest tested:
-                    # If user passed lowest tested tier with >= 50%, assume foundations known
-                    lowest_ratio = level_stats[min_tested_tier]["correct"] / max(level_stats[min_tested_tier]["total"], 1)
-                    if lowest_ratio >= 0.5:
-                        est_vocab += band_size * 1.0
-                    else:
-                        est_vocab += band_size * lowest_ratio
-                elif idx > max_tier_idx:
-                    # Untested higher tiers contribute 0 words
-                    est_vocab += 0.0
-                else:
-                    # Untested tier between tested tiers
-                    est_vocab += band_size * 0.5
-
-        # Speed bonus for fluent retrieval
-        if 0.0 < avg_response_time <= 3.5 and raw_pct >= 60.0:
-            est_vocab *= 1.03
-
-        vocab_est = int(max(500, min(26000, round(est_vocab))))
-
-        # 2. Derive Candidate CEFR Level from Estimated Vocab
-        candidate_level = "A1"
-        for lvl, min_words in [
-            ("C2", 20000),
-            ("C1", 13000),
-            ("B2", 7500),
-            ("B1", 4000),
-            ("A2", 2000),
-            ("A1", 0),
-        ]:
-            if vocab_est >= min_words:
-                candidate_level = lvl
-                break
-
-        # 3. CEILING RULE: Never exceed the highest difficulty tested!
-        if CEFR_LEVELS.index(candidate_level) > max_tier_idx:
-            candidate_level = max_tested_tier
-
-        # 4. FOUNDATIONS CHECK & GAP CONSTRAINT:
-        # To achieve C1 or C2, user must not have completely failed B1 or B2
-        if candidate_level in ("C1", "C2"):
-            if level_stats["B2"]["total"] > 0 and level_stats["B2"]["correct"] == 0:
-                candidate_level = "B2"
-            if level_stats["B1"]["total"] > 0 and level_stats["B1"]["correct"] == 0:
-                candidate_level = "A2"
-
-        # To achieve A2, user must not have completely failed A2 if tested
-        if candidate_level == "A2" and level_stats["A2"]["total"] > 0 and level_stats["A2"]["correct"] == 0:
-            candidate_level = "A1"
-
-        # 5. SAMPLE SIZE & RELIABILITY CHECK:
-        is_reliable = (total >= 5)
-        sample_warning = None
-        if total < 5:
-            is_reliable = False
-            sample_warning = f"Preliminary estimate ({total} question{'s' if total > 1 else ''} answered — complete a full 10-12 question test for a certified rating)"
-            if total <= 2 and candidate_level not in ("A1", "A2"):
-                candidate_level = "A2" if candidate_level in ("B1", "B2") else "B1"
-
-        labels = {
-            "A1": "A1 - Beginner (Foundation)",
-            "A2": "A2 - Elementary (Basic Working)",
-            "B1": "B1 - Intermediate (Conversational)",
-            "B2": "B2 - Upper Intermediate (Independent Fluency)",
-            "C1": "C1 - Advanced (Academic & Professional)",
-            "C2": "C2 - Mastery (Native / Erudite Fluency)",
-        }
-
-        if not is_reliable:
-            cefr_label = f"{labels.get(candidate_level, candidate_level)} [Preliminary]"
-        else:
-            cefr_label = labels.get(candidate_level, candidate_level)
-
-        # Response speed assessment
-        if avg_response_time <= 0:
-            speed_rating = "Untimed"
-        elif avg_response_time <= 3.5:
-            speed_rating = "Automatic / Fluent"
-        elif avg_response_time <= 7.0:
-            speed_rating = "Steady"
-        else:
-            speed_rating = "Deliberate"
-
-        # Feedback message
-        if not is_reliable:
-            feedback = f"Preliminary estimate based on {total} question(s). Finish a complete 10-12 question benchmark for an official CEFR profile."
-        elif candidate_level in ("C1", "C2"):
-            feedback = "Exceptional lexical range! You demonstrate a commanding vocabulary capable of comprehending complex academic literature and subtle idioms."
-        elif candidate_level == "B2":
-            feedback = "Strong upper-intermediate proficiency! You demonstrate firm control of foundational and abstract vocabulary, ready to advance into specialized literature."
-        elif candidate_level == "B1":
-            feedback = "Good intermediate proficiency. You have established solid core everyday and conversational vocabulary, with great potential for B2 growth."
-        else:
-            feedback = "Foundational stage. Regular daily flashcard practice will quickly build your core active vocabulary."
-
+        correct = sum(bool(answer) for answer in user_correct)
+        breakdown = {level: {"correct": 0, "total": 0} for level in CEFR_LEVELS}
+        for question, answer in zip(questions, user_correct):
+            level = question.cefr_level.upper() if question.cefr_level else ""
+            bucket = breakdown.setdefault(level or "Unrated", {"correct": 0, "total": 0})
+            bucket["total"] += 1
+            bucket["correct"] += int(bool(answer))
+        score = round(100 * correct / total, 1) if total else 0.0
         return {
-            "score_pct": round(raw_pct, 1),
-            "weighted_pct": round(raw_pct, 1),
-            "correct_count": correct_count,
-            "total_questions": total,
-            "cefr_level": candidate_level,
-            "cefr_label": cefr_label,
-            "estimated_vocab_size": vocab_est,
-            "speed_rating": speed_rating,
-            "feedback": feedback,
-            "level_breakdown": level_stats,
-            "is_reliable": is_reliable,
-            "sample_warning": sample_warning
+            "score_pct": score, "weighted_pct": score,
+            "correct_count": correct, "total_questions": total,
+            "cefr_level": "Uncalibrated", "cefr_label": "Not assessed",
+            "estimated_vocab_size": 0,  # Legacy storage sentinel: no estimate.
+            "speed_rating": "Observed response time" if avg_response_time > 0 else "Untimed",
+            "feedback": "Use missed items to guide practice, then check them again after a delay.",
+            "level_breakdown": breakdown, "is_reliable": False,
+            "accuracy_interval": wilson_interval(correct, total),
+            "sample_warning": "Practice items are not a calibrated CEFR or vocabulary-size test. "
+                              "The 95% Wilson interval assumes independent trials; item selection and guessing also affect scores.",
         }
-

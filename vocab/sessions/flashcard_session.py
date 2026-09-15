@@ -53,7 +53,7 @@ def run_flashcard_session(
             console.print(
                 f"[bold cyan]⏰ Recommended Next Session:[/bold cyan] "
                 f"[bold bright_white]{next_session['full_label']}[/bold bright_white] "
-                f"[dim]({next_session['card_count']} cards mature, ~{next_session['accumulated_capacity']} brain capacity)[/dim]\n"
+                f"[dim]({next_session['card_count']} cards mature, ~{next_session['accumulated_capacity']} workload points)[/dim]\n"
             )
         console.print("[dim]You can add more words, switch focus deck, or practice typing mode.[/dim]")
         pause_prompt()
@@ -64,7 +64,7 @@ def run_flashcard_session(
     due_count = len(words) - placeholder_count - new_count
     if placeholder_count > 0 and due_count == 0 and new_count == 0:
         next_session = db.get_recommended_next_session(group_id=group_id)
-        rec_info = f" [dim](next optimal session: [bold white]{next_session['short_label']}[/bold white], ~{next_session['accumulated_capacity']} cap)[/dim]" if next_session else ""
+        rec_info = f" [dim](suggested review batch: [bold white]{next_session['short_label']}[/bold white], ~{next_session['accumulated_capacity']} cap)[/dim]" if next_session else ""
         console.print(f"[bold cyan]ℹ All caught up! Practicing {placeholder_count} upcoming cards (closest due)[/bold cyan]{rec_info}\n")
     else:
         parts = []
@@ -79,9 +79,9 @@ def run_flashcard_session(
             parts_str += " • [bold green]alternating[/bold green]"
         next_session = db.get_recommended_next_session(group_id=group_id)
         if next_session and not next_session.get("is_optimal_now"):
-            opt_info = f" [dim](next optimal session: [bold white]{next_session['short_label']}[/bold white], ~{next_session['accumulated_capacity']} cap)[/dim]"
+            opt_info = f" [dim](suggested review batch: [bold white]{next_session['short_label']}[/bold white], ~{next_session['accumulated_capacity']} cap)[/dim]"
         elif next_session and next_session.get("is_optimal_now"):
-            opt_info = " [dim](optimal session size)[/dim]"
+            opt_info = " [dim](suggested review batch size)[/dim]"
         else:
             opt_info = ""
         console.print(f"[dim cyan]ℹ Session loaded: {parts_str}{opt_info}[/dim cyan]\n")
@@ -138,7 +138,7 @@ def run_flashcard_session(
             recurrent_count=recurrent_count
         )
 
-        start_thought_time = time.time()
+        start_thought_time = time.perf_counter()
 
         # Wait for user to flip the card
         try:
@@ -174,7 +174,7 @@ def run_flashcard_session(
         except (KeyboardInterrupt, EOFError):
             break
 
-        thought_time = time.time() - start_thought_time
+        thought_time = time.perf_counter() - start_thought_time
 
         # Check if card is a new word introduction
         is_new_word = (current_word.state == CardState.NEW.value and current_word.reps == 0 and recurrent_count == 0)
@@ -182,8 +182,9 @@ def run_flashcard_session(
             # User studied new word on the front and pressed Enter to continue.
             # Do NOT show the rank 1-4 screen after a new word.
             # Directly transition to LEARNING state, log review, and requeue for active recall.
+            review_now = datetime.now(timezone.utc)
             updated_word, scheduled_days = SRSEngine.calculate_next_state(
-                current_word, SRSGrade.GOOD, thought_time_seconds=0.0
+                current_word, SRSGrade.GOOD, thought_time_seconds=0.0, now=review_now
             )
             updated_word.state = CardState.LEARNING.value
             updated_word.step = 0
@@ -192,15 +193,14 @@ def run_flashcard_session(
             db.log_review(
                 word_id=current_word.id,
                 grade=int(SRSGrade.GOOD),
-                review_mode="flashcard",
+                review_mode="introduction",
                 scheduled_days=scheduled_days,
-                elapsed_seconds=time.time() - start_thought_time,
+                elapsed_seconds=time.perf_counter() - start_thought_time,
                 thought_time_seconds=0.0,
-                card_state=CardState.NEW.value
+                card_state=CardState.NEW.value, now=review_now
             )
             queue.requeue_card(updated_word, custom_offset=3)
-            stats.total_reviews += 1
-            console.print(f"  [bold cyan]✓ Learned '{current_word.word}'[/bold cyan] [dim](entered learning queue for recall practice)[/dim]\n")
+            console.print(f"  [bold cyan]✓ Introduced '{current_word.word}'[/bold cyan] [dim](entered learning queue for recall practice)[/dim]\n")
             time.sleep(0.35)
             continue
 
@@ -271,15 +271,16 @@ def run_flashcard_session(
             # User opted to quit early
             break
 
-        elapsed_sec = time.time() - start_thought_time
+        elapsed_sec = time.perf_counter() - start_thought_time
 
         max_tt = db.get_max_thought_time_threshold() if hasattr(db, "get_max_thought_time_threshold") else 30.0
         is_outlier = (thought_time > max_tt)
         effective_tt = 0.0 if is_outlier else thought_time
 
         # 3. Calculate Adaptive SRS State with Cognitive Latency & Save to DB
+        review_now = datetime.now(timezone.utc)
         updated_word, scheduled_days = SRSEngine.calculate_next_state(
-            current_word, grade, thought_time_seconds=effective_tt
+            current_word, grade, thought_time_seconds=effective_tt, now=review_now
         )
         db.update_word(updated_word)
         db.log_review(
@@ -288,8 +289,8 @@ def run_flashcard_session(
             review_mode="flashcard",
             scheduled_days=scheduled_days,
             elapsed_seconds=elapsed_sec,
-            thought_time_seconds=effective_tt,
-            card_state=current_word.state
+            thought_time_seconds=thought_time,
+            card_state=current_word.state, now=review_now
         )
 
         # Check Mastery Qualification (Criterion A or Criterion B)
@@ -308,7 +309,7 @@ def run_flashcard_session(
         stats.total_reviews += 1
         if is_outlier:
             stats.outlier_thought_count += 1
-            console.print(f"  [dim yellow]⏱ Thought time: {thought_time:.1f}s (errand outlier > {max_tt:.0f}s — excluded from latency stats)[/dim yellow]")
+            console.print(f"  [dim yellow]⏱ Thought time: {thought_time:.1f}s (timing outlier > {max_tt:.0f}s — excluded from latency stats)[/dim yellow]")
         elif effective_tt > 0.0:
             stats.total_thought_time += effective_tt
             stats.timed_reviews += 1
@@ -330,12 +331,12 @@ def run_flashcard_session(
 
         # Calculation results expressed purely as flashcard sequence and scheduling
         if is_mastered:
-            console.print(f"\n  [bold bright_green]🏆 MASTERED! '{current_word.word}' has achieved permanent mastery and will never appear in reviews again![/bold bright_green]")
+            console.print(f"\n  [bold bright_green]🏆 MASTERED! '{current_word.word}' is retired from review.[/bold bright_green]")
         elif was_requeued:
             console.print("  [dim yellow]↻ Re-queued in session sequence for reinforcement[/dim yellow]")
         elif getattr(current_word, "is_placeholder", False) and grade in (SRSGrade.GOOD, SRSGrade.EASY):
             int_str = SRSEngine.format_interval(scheduled_days)
-            console.print(f"  [bold bright_cyan]★ Memory compounded ahead of time: scheduled for {int_str}[/bold bright_cyan]")
+            console.print(f"  [bold bright_cyan]◷ Early practice complete; next review in {int_str}[/bold bright_cyan]")
         else:
             int_str = SRSEngine.format_interval(scheduled_days)
             console.print(f"  [dim green]✓ Scheduled for {int_str}[/dim green]")
@@ -376,14 +377,14 @@ def _render_session_summary(
     table.add_column("Value", style="bold white", justify="right")
 
     table.add_row("Total Reviews Conducted:", str(stats.total_reviews))
-    table.add_row("Unique Cards Mastered:", str(stats.unique_words))
+    table.add_row("Unique cards completed:", str(stats.unique_words))
     table.add_row("[red]Again ✕ (Lapses / Recurrent):[/red]", str(stats.again_count))
     table.add_row("[yellow]Hard ▲ (Struggled):[/yellow]", str(stats.hard_count))
     table.add_row("[green]Good ✓ (Solid Recall):[/green]", str(stats.good_count))
-    table.add_row("[cyan]Easy ★ (Mastered):[/cyan]", str(stats.easy_count))
+    table.add_row("[cyan]Easy ★ (Effortless):[/cyan]", str(stats.easy_count))
     if stats.mastered_count > 0:
         table.add_row("[bold bright_green]🏆 Words Retired (Mastered):[/bold bright_green]", f"[bold bright_green]{stats.mastered_count}[/bold bright_green]")
-    table.add_row("Session Retention Rate:", f"[bold bright_green]{stats.retention_rate:.1f}%[/bold bright_green]")
+    table.add_row("Observed recall rate:", f"[bold bright_green]{stats.retention_rate:.1f}%[/bold bright_green]")
     if stats.timed_reviews > 0:
         table.add_row("Average Thought Time:", f"[bold magenta]{stats.avg_thought_time:.1f}s[/bold magenta]")
     if stats.outlier_thought_count > 0:
@@ -394,17 +395,17 @@ def _render_session_summary(
         q_tier = quality_result["quality_tier"]
         tier_color = "bright_green" if q_pct >= 100 else ("yellow" if q_pct >= 80 else "red")
         table.add_section()
-        table.add_row("Learning Quality Rating:", f"[{tier_color} bold]{q_pct:.0f}% ({q_tier})[/{tier_color} bold]")
+        table.add_row("Workload score (heuristic):", f"[{tier_color} bold]{q_pct:.0f}% ({q_tier})[/{tier_color} bold]")
         table.add_row(
-            "Mastery Reps / Word:",
-            f"{quality_result['avg_repetitions']:.2f} [dim](expected {quality_result['avg_expected_repetitions']:.2f} for avg diff {quality_result['avg_difficulty']:.1f})[/dim]"
+            "Attempts per word:",
+            f"{quality_result['avg_repetitions']:.2f} [dim](heuristic baseline {quality_result['avg_expected_repetitions']:.2f} for avg diff {quality_result['avg_difficulty']:.1f})[/dim]"
         )
-        table.add_row("Session Cognitive Load:", f"{quality_result['total_load']} cap points")
+        table.add_row("Session workload:", f"{quality_result['total_load']} workload points")
         if tuning_result and tuning_result.get("delta") != 0:
             d_str = f"+{tuning_result['delta']}" if tuning_result['delta'] > 0 else str(tuning_result['delta'])
             d_color = "bright_green" if tuning_result['delta'] > 0 else "yellow"
-            table.add_row("Adaptive Capacity Limit:", f"{tuning_result['new_threshold']} ([{d_color}]{d_str}[/{d_color}])")
+            table.add_row("Workload budget (heuristic):", f"{tuning_result['new_threshold']} ([{d_color}]{d_str}[/{d_color}])")
 
     console.print(table)
-    console.print("\n[bold bright_green]✓ Keep up the momentum! Consistent spaced review builds permanent memory.[/bold bright_green]")
+    console.print("\n[bold bright_green]✓ Session saved. Return for spaced retrieval practice.[/bold bright_green]")
     pause_prompt()

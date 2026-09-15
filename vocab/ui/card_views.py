@@ -7,6 +7,7 @@ from typing import Dict, Optional, List
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.markup import escape
 from rich.columns import Columns
 from rich.align import Align
 from rich.box import ROUNDED, DOUBLE, HEAVY, MINIMAL
@@ -40,12 +41,12 @@ def render_flashcard_front(
 ) -> None:
     """Renders the front face of a flashcard."""
     # Build header badges
-    group_text = f"[bold white on blue] {word.group_name or 'Default'} [/bold white on blue]"
+    group_text = f"[bold cyan] {escape(word.group_name or 'Default')} [/bold cyan]"
     progress_text = f"[bold bright_cyan]Card {queue_index}/{queue_total}[/bold bright_cyan]"
     
     status_parts = [group_text, progress_text]
     if getattr(word, "is_placeholder", False):
-        status_parts.append(f"[bold cyan on dark_blue] ◷ UPCOMING ({word.format_due_time()}) [/bold cyan on dark_blue]")
+        status_parts.append(f"[dim cyan] ◷ UPCOMING ({word.format_due_time()}) [/dim cyan]")
 
     if word.state == CardState.NEW.value:
         status_parts.append("[bold bright_green]● NEW[/bold bright_green]")
@@ -107,7 +108,7 @@ def render_flashcard_front(
         content,
         title=f"[bold white] {header_line} [/bold white]",
         subtitle=subtitle,
-        border_style="bright_cyan",
+        border_style="dim",
         box=ROUNDED,
         padding=(1, 2),
     )
@@ -124,12 +125,12 @@ def render_flashcard_back(
     recurrent_count: int = 0
 ) -> None:
     """Renders the revealed back face of a flashcard with SRS rating options."""
-    group_text = f"[bold white on blue] {word.group_name or 'Default'} [/bold white on blue]"
+    group_text = f"[bold cyan] {escape(word.group_name or 'Default')} [/bold cyan]"
     progress_text = f"[bold bright_cyan]Card {queue_index}/{queue_total}[/bold bright_cyan]"
     
     status_parts = [group_text, progress_text]
     if getattr(word, "is_placeholder", False):
-        status_parts.append(f"[bold cyan on dark_blue] ◷ UPCOMING ({word.format_due_time()}) [/bold cyan on dark_blue]")
+        status_parts.append(f"[dim cyan] ◷ UPCOMING ({word.format_due_time()}) [/dim cyan]")
 
     if word.state == CardState.NEW.value:
         status_parts.append("[bold bright_green]● NEW[/bold bright_green]")
@@ -180,7 +181,7 @@ def render_flashcard_back(
     card_panel = Panel(
         body,
         title=f"[bold white] {header_line} [/bold white]",
-        border_style="bright_green",
+        border_style="dim",
         box=ROUNDED,
         padding=(1, 2),
     )
@@ -199,10 +200,23 @@ def render_flashcard_back(
 
     btn_table.add_row(
         f"Forgot / Re-test\n[dim cyan]Next: {previews[SRSGrade.AGAIN]}[/dim cyan]",
-        f"Struggled\n[dim cyan]Next: {previews[SRSGrade.HARD]}[/dim cyan]",
+        f"Correct, with difficulty\n[dim cyan]Next: {previews[SRSGrade.HARD]}[/dim cyan]",
         f"Recalled OK\n[dim cyan]Next: {previews[SRSGrade.GOOD]}[/dim cyan]",
-        f"Mastered\n[dim cyan]Next: {previews[SRSGrade.EASY]}[/dim cyan]",
+        f"Effortless recall\n[dim cyan]Next: {previews[SRSGrade.EASY]}[/dim cyan]",
     )
+
+    if console.width < 76:
+        btn_table = Table(box=ROUNDED, border_style="dim", expand=True)
+        btn_table.add_column("Rating", no_wrap=True)
+        btn_table.add_column("Recall")
+        btn_table.add_column("Next", no_wrap=True)
+        for grade, label, meaning, color in [
+            (SRSGrade.AGAIN, "1 Again ✕", "Forgot", "red"),
+            (SRSGrade.HARD, "2 Hard ▲", "Correct, with difficulty", "yellow"),
+            (SRSGrade.GOOD, "3 Good ✓", "Recalled OK", "green"),
+            (SRSGrade.EASY, "4 Easy ★", "Effortless recall", "cyan"),
+        ]:
+            btn_table.add_row(Text(label, style=color), Text(meaning), previews[grade])
 
     console.print(btn_table)
     console.print("  " + "  [dim]│[/dim]  ".join([
@@ -223,13 +237,13 @@ def render_typing_prompt(
     recurrent_count: int = 0
 ) -> None:
     """Renders the prompt for active recall typing mode."""
-    group_text = f"[bold white on blue] {word.group_name or 'Default'} [/bold white on blue]"
+    group_text = f"[bold cyan] {escape(word.group_name or 'Default')} [/bold cyan]"
     progress_text = f"[bold bright_cyan]Card {queue_index}/{queue_total}[/bold bright_cyan]"
     status_line = f"{group_text}  {progress_text}"
 
     if getattr(word, "is_placeholder", False):
         due_str = word.format_due_time()
-        status_line += f"  [bold cyan on dark_blue] ◷ UPCOMING ({due_str}) [/bold cyan on dark_blue]"
+        status_line += f"  [dim cyan] ◷ UPCOMING ({due_str}) [/dim cyan]"
     if word.state == CardState.NEW.value:
         status_line += "  [bold bright_green]● NEW[/bold bright_green]"
     elif word.state in (CardState.LEARNING.value, CardState.RELEARNING.value):
@@ -277,13 +291,13 @@ def render_quiz_question(
     recurrent_count: int = 0
 ) -> None:
     """Renders a multiple choice speed quiz question."""
-    group_text = f"[bold white on blue] {word.group_name or 'Default'} [/bold white on blue]"
+    group_text = f"[bold cyan] {escape(word.group_name or 'Default')} [/bold cyan]"
     progress_text = f"[bold bright_cyan]Question {queue_index}/{queue_total}[/bold bright_cyan]"
     status_line = f"{group_text}  {progress_text}"
 
     if getattr(word, "is_placeholder", False):
         due_str = word.format_due_time()
-        status_line += f"  [bold cyan on dark_blue] ◷ UPCOMING ({due_str}) [/bold cyan on dark_blue]"
+        status_line += f"  [dim cyan] ◷ UPCOMING ({due_str}) [/dim cyan]"
     if word.state == CardState.NEW.value:
         status_line += "  [bold bright_green]● NEW[/bold bright_green]"
     elif word.state in (CardState.LEARNING.value, CardState.RELEARNING.value):

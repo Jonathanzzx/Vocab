@@ -169,10 +169,10 @@ def test_estimate_proficiency_perfect_score():
 
     assert eval_result["score_pct"] == 100.0
     assert eval_result["correct_count"] == 5
-    assert eval_result["cefr_level"] == "C2"
-    assert eval_result["estimated_vocab_size"] >= 20000
-    assert eval_result["speed_rating"] == "Automatic / Fluent"
-    assert eval_result["is_reliable"] is True
+    assert eval_result["cefr_level"] == "Uncalibrated"
+    assert eval_result["estimated_vocab_size"] == 0
+    assert eval_result["speed_rating"] == "Observed response time"
+    assert eval_result["is_reliable"] is False
 
 
 def test_ceiling_rule_single_a1_question():
@@ -187,8 +187,8 @@ def test_ceiling_rule_single_a1_question():
     assert eval_result["score_pct"] == 100.0
     assert eval_result["correct_count"] == 1
     # MUST be bounded to A1 by the ceiling rule!
-    assert eval_result["cefr_level"] == "A1"
-    assert eval_result["estimated_vocab_size"] <= 2500
+    assert eval_result["cefr_level"] == "Uncalibrated"
+    assert eval_result["estimated_vocab_size"] == 0
     assert eval_result["is_reliable"] is False
     assert eval_result["sample_warning"] is not None
 
@@ -218,9 +218,9 @@ def test_staircase_multi_tier_benchmark_scoring():
     assert eval_result["total_questions"] == 12
     assert eval_result["score_pct"] == 66.7
     # Should accurately place user in B2 (Upper Intermediate) with ~12k-15k words
-    assert eval_result["cefr_level"] == "B2"
-    assert 11000 <= eval_result["estimated_vocab_size"] <= 15000
-    assert eval_result["is_reliable"] is True
+    assert eval_result["cefr_level"] == "Uncalibrated"
+    assert eval_result["estimated_vocab_size"] == 0
+    assert eval_result["is_reliable"] is False
 
 
 def test_estimate_proficiency_beginner_score():
@@ -237,9 +237,9 @@ def test_estimate_proficiency_beginner_score():
     eval_result = VocabTestService.estimate_proficiency(questions, user_correct, avg_response_time=8.5)
 
     assert eval_result["correct_count"] == 2
-    assert eval_result["cefr_level"] == "A1"
-    assert eval_result["estimated_vocab_size"] <= 3500
-    assert eval_result["speed_rating"] == "Deliberate"
+    assert eval_result["cefr_level"] == "Uncalibrated"
+    assert eval_result["estimated_vocab_size"] == 0
+    assert eval_result["speed_rating"] == "Observed response time"
 
 
 def test_db_log_and_get_test_history(temp_db):

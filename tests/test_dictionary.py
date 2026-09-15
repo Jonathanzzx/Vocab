@@ -297,7 +297,7 @@ def test_flashcard_front_hides_definition_on_learning_words():
         card_views.console = orig_console
 
 
-def test_dictionary_check_word_exists_valid():
+def test_dictionary_check_word_exists_valid(dictionary_responses):
     """Test check_word_exists correctly validates real English words and terms."""
     valid, sug = DictionaryService.check_word_exists("apple")
     assert valid is True
@@ -312,7 +312,7 @@ def test_dictionary_check_word_exists_valid():
     assert sug is None
 
 
-def test_dictionary_check_word_exists_typo_with_suggestion():
+def test_dictionary_check_word_exists_typo_with_suggestion(dictionary_responses):
     """Test check_word_exists identifies misspellings and suggests correct spellings."""
     valid, sug = DictionaryService.check_word_exists("testostrone")
     assert valid is False
@@ -342,7 +342,7 @@ def test_dictionary_check_word_exists_gibberish_and_empty():
     assert sug is None
 
 
-def test_add_word_form_tracks_and_passes_unexpected_words():
+def test_add_word_form_tracks_and_passes_unexpected_words(dictionary_responses):
     """Test that add_word_form detects unexpected words and passes them at session end."""
     import os
     import tempfile
@@ -459,3 +459,27 @@ def test_review_unexpected_words_delete():
 
 
 
+
+
+@pytest.fixture
+def dictionary_responses(monkeypatch):
+    """Exercise dictionary parsing with fixed HTTP responses, independent of network."""
+    import io
+    import json
+    import urllib.parse
+    from vocab import dictionary
+    for cache in ("_EXISTENCE_CACHE", "_LOOKUP_CACHE", "_CHINESE_CACHE"):
+        monkeypatch.setattr(dictionary, cache, {})
+    corrections = {"testostrone": "testosterone", "psycology": "psychology", "definately": "definitely"}
+
+    def urlopen(request, **kwargs):
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+        word = query.get("sp", [""])[0]
+        match = corrections.get(word, word)
+        response = io.BytesIO(json.dumps([{"word": match, "defs": ["n\ta dictionary definition"]}]).encode())
+        response.status = 200
+        return response
+
+    monkeypatch.setattr(dictionary.urllib.request, "urlopen", urlopen)
+    # This form test covers validation, not background enrichment (tested separately).
+    monkeypatch.setattr(dictionary.BackgroundEnricher, "enrich", lambda **kwargs: None)

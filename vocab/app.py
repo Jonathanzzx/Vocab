@@ -14,7 +14,7 @@ from vocab.models import Group
 from vocab.seed_data import seed_database
 from vocab.exporter import DataExporter
 from vocab.ui.theme import console, render_header, pause_prompt
-from vocab.ui.menu import render_main_dashboard
+from vocab.ui.menu import read_dashboard_command
 from vocab.ui.stats_views import render_stats_dashboard
 from vocab.ui.forms import (
     select_group_prompt,
@@ -35,7 +35,7 @@ class VocabApp:
         self.db = Database(db_path)
         self.active_group_id: Optional[int] = None
         self._ensure_initial_data()
-        self.db.sync_all_word_states()
+        # Preserve saved schedules; history replay is an explicit maintenance action.
 
     def _ensure_initial_data(self) -> None:
         """Seeds curated decks only on first run if database is brand new and empty."""
@@ -60,10 +60,8 @@ class VocabApp:
             stats = self.db.get_stats_summary(self.active_group_id)
             active_grp = self.active_group
 
-            render_main_dashboard(active_grp, stats, groups)
-
             try:
-                cmd = input("Select an option [1-9, t, q] > ").strip().lower()
+                cmd = read_dashboard_command(active_grp, stats, groups)
             except (KeyboardInterrupt, EOFError):
                 break
 
