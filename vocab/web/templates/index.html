@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173d3a">
+  <meta name="description" content="A focused vocabulary workspace for spaced review, active recall, and measurable practice.">
+  <title>Vocab · Learning workspace</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <aside class="sidebar">
+    <a class="brand" href="#home"><span class="brand-mark">v.</span><span>vocab<span class="brand-sub">LEARNING WORKSPACE</span></span></a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav aria-label="Main navigation" id="navigation"></nav>
+    <div class="sidebar-bottom"><span class="connection-dot"></span> Local workspace<p>One library. Terminal + web.</p><a href="#research">Research & methodology <span aria-hidden="true">↗</span></a></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="page-label">Overview</span></div><div class="scope"><label for="deck-scope">Deck</label><select id="deck-scope"><option value="">All decks</option></select><button class="button small" data-action="add-word">+ Add word</button></div></header>
+    <main id="content" tabindex="-1"><div class="loading">Opening your workspace…</div></main>
+    <footer class="footer"><span>Built for deliberate practice.</span><a href="#research">SM-2 scheduling · Research notes</a></footer>
+  </div>
+  <dialog id="modal" aria-label="Editor"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -22,7 +22,7 @@ class DataExporter:
         total_words = 0
 
         for g in groups:
-            words = db.get_all_words_for_group(g.id) if hasattr(db, "get_all_words_for_group") else db.get_words(group_id=g.id, limit=10000)
+            words = db.get_words(group_id=g.id, limit=db.count_words(group_id=g.id))
             word_list = []
             for w in words:
                 word_list.append({
@@ -58,7 +58,7 @@ class DataExporter:
     @staticmethod
     def export_to_csv(db: Database, filepath: str, group_id: int | None = None) -> int:
         """Exports words to a clean CSV file."""
-        words = db.get_words(group_id=group_id, limit=10000)
+        words = db.get_words(group_id=group_id, limit=db.count_words(group_id=group_id))
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
@@ -112,7 +112,7 @@ class DataExporter:
                 if fresh_group:
                     existing_groups[group_name.lower()] = fresh_group
 
-            existing_words = {w.word.lower() for w in db.get_words(group_id=gid, limit=10000)}
+            existing_words = {w.word.lower() for w in db.get_words(group_id=gid, limit=db.count_words(group_id=gid))}
 
             for w in item.get("words", []):
                 term = w.get("word", "").strip()
@@ -156,12 +156,14 @@ class DataExporter:
             col_map = {col.strip().lower(): idx for idx, col in enumerate(header)}
             group_idx = col_map.get("group")
             word_idx = col_map.get("word")
-            def_idx = col_map.get("definition") or col_map.get("meaning") or col_map.get("def")
-            pos_idx = col_map.get("pos") or col_map.get("part of speech")
-            phonetic_idx = col_map.get("phonetic") or col_map.get("pronunciation")
-            example_idx = col_map.get("example") or col_map.get("sentence")
-            mnemonic_idx = col_map.get("mnemonic") or col_map.get("hint")
-            tags_idx = col_map.get("tags") or col_map.get("tag")
+            def column(*names):
+                return next((col_map[name] for name in names if name in col_map), None)
+            def_idx = column("definition", "meaning", "def")
+            pos_idx = column("pos", "part of speech")
+            phonetic_idx = column("phonetic", "pronunciation")
+            example_idx = column("example", "sentence")
+            mnemonic_idx = column("mnemonic", "hint")
+            tags_idx = column("tags", "tag")
 
             if word_idx is None or def_idx is None:
                 # If header is just data or simple 2 columns: word, definition
@@ -195,7 +197,7 @@ class DataExporter:
                         existing_groups[gname_lower] = fresh_group
 
                 if gid not in cache_words_per_group:
-                    cache_words_per_group[gid] = {w.word.lower() for w in db.get_words(group_id=gid, limit=10000)}
+                    cache_words_per_group[gid] = {w.word.lower() for w in db.get_words(group_id=gid, limit=db.count_words(group_id=gid))}
 
                 if term.lower() in cache_words_per_group[gid]:
                     continue

@@ -254,7 +254,7 @@ def main() -> None:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=["interactive", "review", "typing", "quiz", "test", "stats", "add", "groups", "seed", "export", "import", "sync", "list", "words", "browse", "clean-outliers"],
+        choices=["interactive", "review", "typing", "quiz", "test", "stats", "add", "groups", "seed", "export", "import", "sync", "list", "words", "browse", "clean-outliers", "web"],
         default="interactive",
         help="Action to perform (default: interactive menu)"
     )
@@ -359,7 +359,12 @@ def main() -> None:
         help="Launch interactive mode for word browser"
     )
 
+    parser.add_argument("--port", type=int, default=8766, help="Local web server port (default: 8766)")
     args = parser.parse_args()
+    if args.action == "web":
+        from vocab.web import run_web
+        run_web(args.db, args.port)
+        return
     app = VocabApp(db_path=args.db)
 
     # Resolve group if specified

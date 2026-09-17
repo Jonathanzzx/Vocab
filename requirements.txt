@@ -1,3 +1,5 @@
 rich>=13.0.0
 prompt_toolkit>=3.0.0
 pytest>=7.0.0
+Flask>=3.1,<4
+waitress>=3,<4

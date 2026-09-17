@@ -1415,10 +1415,10 @@ class Database:
 
                 if i == 0:
                     # Due today includes already overdue cards and new cards
-                    query = "SELECT COUNT(*) as cnt FROM words WHERE (state = 'new' OR due_date <= ?)"
+                    query = "SELECT COUNT(*) as cnt FROM words WHERE state != 'mastered' AND (state = 'new' OR due_date <= ?)"
                     params: List[Any] = [day_end]
                 else:
-                    query = "SELECT COUNT(*) as cnt FROM words WHERE due_date >= ? AND due_date <= ? AND state != 'new'"
+                    query = "SELECT COUNT(*) as cnt FROM words WHERE due_date >= ? AND due_date <= ? AND state NOT IN ('new', 'mastered')"
                     params = [day_start, day_end]
 
                 if group_id is not None:
