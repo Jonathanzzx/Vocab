@@ -1042,6 +1042,19 @@ def test_recurrent_session_queue_alternates_mixed_session():
     assert states == ["review", "new", "review", "new", "review", "new"]
 
 
+def test_recurrent_session_queue_interleaves_new_and_learning_cards():
+    """Cards still in learning are returning work and alternate with unseen cards."""
+    words = [
+        Word(id=1, group_id=1, word="learning_1", definition="d1", state="learning"),
+        Word(id=2, group_id=1, word="learning_2", definition="d2", state="learning"),
+        Word(id=3, group_id=1, word="new_1", definition="d3", state="new"),
+        Word(id=4, group_id=1, word="new_2", definition="d4", state="new"),
+    ]
+    queue = RecurrentSessionQueue(words, enable_shuffling=True)
+    states = [queue.next_card().state for _ in range(4)]
+    assert states == ["learning", "new", "learning", "new"]
+
+
 def test_recurrent_session_queue_preserves_urgency_while_alternating():
     """
     Test that critically overdue reviews precede normal due reviews,

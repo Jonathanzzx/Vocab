@@ -639,11 +639,11 @@ class Database:
         else:
             old_words = [
                 w for w in selected_words
-                if getattr(w, "is_placeholder", False) or w.state not in (CardState.NEW.value, CardState.LEARNING.value)
+                if getattr(w, "is_placeholder", False) or w.state != CardState.NEW.value
             ]
             new_words = [
                 w for w in selected_words
-                if not getattr(w, "is_placeholder", False) and w.state in (CardState.NEW.value, CardState.LEARNING.value)
+                if not getattr(w, "is_placeholder", False) and w.state == CardState.NEW.value
             ]
             if old_words and new_words:
                 selected_words = self._alternate_word_lists(old_words, new_words, prefer_old_first=True)

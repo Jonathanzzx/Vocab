@@ -101,12 +101,16 @@ class RecurrentSessionQueue:
     @staticmethod
     def is_new_learning_word(word: Word) -> bool:
         """
-        Returns True if the card represents new learning material
-        (state is 'new' or 'learning', and not a placeholder review card).
+        Returns True for an unseen card (state ``new``), excluding placeholders.
+
+        Learning cards are deliberately treated as returning work. Keeping them
+        in the returning tier lets the queue interleave them with unseen cards,
+        so a session does not present a block of new material followed by a
+        block of cards still being consolidated.
         """
         if getattr(word, "is_placeholder", False):
             return False
-        return word.state in (CardState.NEW.value, CardState.LEARNING.value)
+        return word.state == CardState.NEW.value
 
     @classmethod
     def _alternate_old_and_new(
@@ -548,7 +552,7 @@ class RecurrentSessionQueue:
         for w in words:
             if getattr(w, "is_placeholder", False):
                 tier_placeholders.append(w)
-            elif w.state in (CardState.NEW.value, CardState.LEARNING.value):
+            elif w.state == CardState.NEW.value:
                 tier_new_cards.append(w)
             elif w.urgency_score(now) > 10.0:
                 tier_critically_overdue.append(w)
