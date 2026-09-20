@@ -25,6 +25,7 @@ class StudySession:
             fill_placeholders=options.get("fill_placeholders", True))
         self.queue = RecurrentSessionQueue(words, enable_shuffling=options.get("shuffle", True),
             previous_sequence=db.get_recent_review_sequence(self.group_id))
+        self.total_added = len(words)
         self.seen = {w.id for w in words}
         self.stats = SessionStats()
         self.current = None
@@ -37,7 +38,9 @@ class StudySession:
     def add_due(self):
         words = self.db.get_newly_due_words(self.group_id, exclude_word_ids=self.seen, limit=20)
         self.seen.update(w.id for w in words)
-        return self.queue.add_cards(words)
+        added = self.queue.add_cards(words)
+        self.total_added += added
+        return added
 
     def next(self):
         if self.phase == "done":
@@ -71,10 +74,10 @@ class StudySession:
 
     def view(self):
         remaining = self.queue.remaining_count + int(self.current is not None and self.phase != "feedback")
-        removed = max(0, self.queue.total_initial - remaining)
         result = {"mode": self.mode, "phase": self.phase, "token": self.token,
-            "remaining": remaining, "removed": removed,
+            "remaining": remaining, "removed": len(self.queue.completed_word_ids),
             "initial": self.queue.total_initial, "completed": len(self.queue.completed_word_ids),
+            "total_added": self.total_added,
             "auto_add": self.auto_add,
             "reviews": self.stats.total_reviews, "retention": self.stats.retention_rate,
             "average_seconds": self.stats.avg_thought_time, "feedback": self.feedback,

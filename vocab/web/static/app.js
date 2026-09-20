@@ -468,14 +468,14 @@ function studyHTML(d) {
     return `<div class="study-container"><section class="panel" style="text-align:center">${d.mode === 'check' ? resultPanel(d.result) : `<div class="eyebrow">Session complete</div><h1>A little progress, well earned.</h1><p>Every completed review has been saved to your library.</p><div class="result-score">${d.reviews}<small> reviews</small></div><div class="metrics" style="grid-template-columns:repeat(2,1fr)"><div class="metric"><div class="metric-label">${d.mode === 'quiz' ? 'Recognition accuracy' : 'Recall accuracy'}</div><div class="metric-value">${d.reviews ? `${d.retention.toFixed(0)}%` : '—'}</div></div><div class="metric"><div class="metric-label">Average response time</div><div class="metric-value">${d.average_seconds}<small> sec</small></div></div></div><p>${Object.entries(d.grades).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>`}<div class="form-actions" style="justify-content:center"><a class="button secondary" href="#home">Back to overview</a><button class="button" data-action="${d.mode === 'check' ? 'another-check' : 'session-options'}">Practice again</button></div></section></div>`;
   }
   const check = d.mode === 'check', c = d.card || {}, q = d.question || {}, f = d.feedback;
-  const progress = check ? d.answered / Math.max(1, d.total) : d.removed / Math.max(1, d.initial);
+  const progress = check ? d.answered / Math.max(1, d.total) : d.completed / Math.max(1, d.total_added);
   const label = check ? 'Vocabulary check' : { flashcard: 'Flashcards', typing: 'Typing practice', quiz: 'Recognition quiz' }[d.mode];
   const wordToSpeak = check ? '' : (c.word || '');
 
   return `<div class="study-container"><div class="study-top">
     <span>${label} <span class="slash">/</span>${check ? `${d.answered} of ${d.total} answered` : `${d.remaining} remaining · ${d.reviews} reviews`}</span>
     <button class="button small secondary" data-action="study" data-op="end">Finish session${key('q')}</button>
-  </div><div class="progress" role="progressbar" aria-label="Session words removed" aria-valuemin="0" aria-valuemax="${check ? d.total : d.initial}" aria-valuenow="${check ? d.answered : d.removed}"><span style="width:${Math.min(100, progress * 100)}%"></span></div>
+  </div><div class="progress" role="progressbar" aria-label="Session words completed" aria-valuemin="0" aria-valuemax="${check ? d.total : d.total_added}" aria-valuenow="${check ? d.answered : d.completed}"><span style="width:${Math.min(100, progress * 100)}%"></span></div>
     <section class="study-card ${d.phase === 'revealed' ? 'revealed' : ''} ${d.phase}"><div class="state-line">
       <span>${check ? `${esc(q.category)} · item ${esc(q.level)}` : `${esc(c.group_name)} · ${d.phase === 'introduction' ? 'First look' : esc(c.state)}`}</span>
       ${wordToSpeak ? `<button class="speech-btn" data-action="speak" data-word="${esc(wordToSpeak)}" aria-label="Pronounce word (p or r)" title="Pronounce word (p or r)"><svg class="icon" viewBox="0 0 24 24"><path d="${paths.speaker}"/></svg></button>` : ''}

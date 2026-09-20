@@ -137,15 +137,16 @@ def test_flashcard_introduction_and_recall_match_shared_engine(web):
 
 def test_session_progress_counts_words_removed_from_active_queue(web):
     state = start(web, mode="flashcard")
-    assert state["removed"] == 0
+    assert state["completed"] == 0
+    assert state["total_added"] == state["initial"]
     introduced = act(web, state, "introduce").json
-    # Introduction re-queues the card for retrieval, so no word has left the session.
-    assert introduced["removed"] == 0
+    # Introduction re-queues the card; it is not completed yet.
+    assert introduced["completed"] == 0
     after_next = act(web, introduced, "next").json
     revealed = act(web, after_next, "reveal").json
     graded = act(web, revealed, "grade", grade=3).json
-    assert graded["removed"] == 1
-    assert graded["remaining"] == graded["initial"] - graded["removed"]
+    assert graded["completed"] == 1
+    assert graded["total_added"] == graded["initial"]
 
 
 @pytest.mark.parametrize("answer,grade", [("evidence", "Good"), ("evidenc", "Hard"), ("wrong", "Again")])
