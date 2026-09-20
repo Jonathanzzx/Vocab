@@ -135,6 +135,19 @@ def test_flashcard_introduction_and_recall_match_shared_engine(web):
     assert done["phase"] == "done"
 
 
+def test_session_progress_counts_words_removed_from_active_queue(web):
+    state = start(web, mode="flashcard")
+    assert state["removed"] == 0
+    introduced = act(web, state, "introduce").json
+    # Introduction re-queues the card for retrieval, so no word has left the session.
+    assert introduced["removed"] == 0
+    after_next = act(web, introduced, "next").json
+    revealed = act(web, after_next, "reveal").json
+    graded = act(web, revealed, "grade", grade=3).json
+    assert graded["removed"] == 1
+    assert graded["remaining"] == graded["initial"] - graded["removed"]
+
+
 @pytest.mark.parametrize("answer,grade", [("evidence", "Good"), ("evidenc", "Hard"), ("wrong", "Again")])
 def test_typing_grades_and_requeues(web, answer, grade):
     state = start(web, mode="typing")
@@ -316,3 +329,16 @@ def test_early_success_preserves_schedule(web):
     assert response.status_code == 200, response.json
     saved = db.get_word_by_id(old.id)
     assert (saved.due_date, saved.reps, saved.interval_days) == (old.due_date, old.reps, old.interval_days)
+
+
+def test_sync_endpoint_and_revision_tracking(web):
+    client = web[1]
+    initial = client.get("/api/sync").json
+    assert initial["revision"] >= 1
+    assert initial["changed"] is True
+    assert client.get(f"/api/sync?since={initial['revision']}").json["changed"] is False
+
+    post(web, "groups", {"name": "SyncTest", "description": "Testing sync"})
+    updated = client.get(f"/api/sync?since={initial['revision']}").json
+    assert updated["changed"] is True
+    assert updated["revision"] > initial["revision"]

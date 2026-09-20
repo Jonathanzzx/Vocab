@@ -70,8 +70,10 @@ class StudySession:
             random.shuffle(self.choices)
 
     def view(self):
+        remaining = self.queue.remaining_count + int(self.current is not None and self.phase != "feedback")
+        removed = max(0, self.queue.total_initial - remaining)
         result = {"mode": self.mode, "phase": self.phase, "token": self.token,
-            "remaining": self.queue.remaining_count + int(self.current is not None and self.phase != "feedback"),
+            "remaining": remaining, "removed": removed,
             "initial": self.queue.total_initial, "completed": len(self.queue.completed_word_ids),
             "auto_add": self.auto_add,
             "reviews": self.stats.total_reviews, "retention": self.stats.retention_rate,
