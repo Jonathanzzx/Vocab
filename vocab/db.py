@@ -30,6 +30,7 @@ class Database:
         conn = sqlite3.connect(self.db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 10000")
         try:
             yield conn
         finally:
@@ -37,6 +38,11 @@ class Database:
 
     def _init_db(self) -> None:
         with self.get_connection() as conn:
+            if self.db_path != ":memory:":
+                try:
+                    conn.execute("PRAGMA journal_mode = WAL")
+                except sqlite3.OperationalError:
+                    pass
             cursor = conn.cursor()
 
             # Groups table
@@ -351,26 +357,6 @@ class Database:
             words.sort(key=lambda w: w.urgency_score(now), reverse=True)
             return words[:limit]
 
-    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """Fetches a setting value from settings table."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
-            row = cursor.fetchone()
-            if row:
-                return row["value"]
-            return default
-
-    def set_setting(self, key: str, value: str) -> None:
-        """Saves or updates a setting value in settings table."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (key, str(value))
-            )
-            conn.commit()
-
     def tune_capacity_threshold(
         self,
         load: float,
@@ -660,28 +646,10 @@ class Database:
         Interleaves old review/placeholder cards and new learning cards
         using exact integer proportional placement so they appear alternately.
         """
-        if not old_words:
-            return list(new_words)
-        if not new_words:
-            return list(old_words)
-
-        a_len = len(old_words)
-        b_len = len(new_words)
-        tagged = []
-
-        if prefer_old_first:
-            for i, w in enumerate(old_words):
-                tagged.append((2 * i * b_len, 0, i, w))
-            for j, w in enumerate(new_words):
-                tagged.append(((2 * j + 1) * a_len, 1, j, w))
-        else:
-            for j, w in enumerate(new_words):
-                tagged.append((2 * j * a_len, 0, j, w))
-            for i, w in enumerate(old_words):
-                tagged.append(((2 * i + 1) * b_len, 1, i, w))
-
-        tagged.sort(key=lambda x: (x[0], x[1], x[2]))
-        return [x[3] for x in tagged]
+        from vocab.srs import RecurrentSessionQueue
+        return RecurrentSessionQueue._alternate_old_and_new(
+            old_words, new_words, prefer_old_first=prefer_old_first
+        )
 
     def get_newly_due_words(
         self,
@@ -1149,6 +1117,19 @@ class Database:
             recent_success = sum(recent_grades.get(int(g), 0) for g in (SRSGrade.HARD, SRSGrade.GOOD, SRSGrade.EASY))
             retention_rate = (recent_success / total_recent_reviews * 100.0) if total_recent_reviews > 0 else 0.0
 
+            all_reviews_query = """
+                SELECT COUNT(*) AS cnt
+                FROM review_logs rl
+                JOIN words w ON rl.word_id = w.id
+                WHERE rl.review_mode NOT IN ('quiz', 'introduction')
+            """
+            all_reviews_params: List[Any] = []
+            if group_id is not None:
+                all_reviews_query += " AND w.group_id = ?"
+                all_reviews_params.append(group_id)
+            cursor.execute(all_reviews_query, all_reviews_params)
+            total_review_attempts = cursor.fetchone()["cnt"]
+
             # Daily activity streak
             cursor.execute("SELECT DISTINCT DATE(reviewed_at) as review_date FROM review_logs ORDER BY review_date DESC")
             active_dates = [r["review_date"] for r in cursor.fetchall()]
@@ -1188,6 +1169,7 @@ class Database:
                 "mature_count": m_row["count_mature"] or 0,
                 "mastered_count": m_row["count_mastered"] or 0,
                 "total_recent_reviews": total_recent_reviews,
+                "total_review_attempts": total_review_attempts,
                 "retention_rate": round(retention_rate, 1),
                 "streak_days": streak,
                 "next_session": next_session,
@@ -1716,6 +1698,7 @@ class Database:
     # --- Settings Operations ---
 
     def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Fetches a setting value from settings table."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
@@ -1723,9 +1706,13 @@ class Database:
             return row["value"] if row else default
 
     def set_setting(self, key: str, value: str) -> None:
+        """Saves or updates a setting value in settings table."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+            cursor.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value))
+            )
             conn.commit()
 
     # --- Vocabulary Proficiency Test Operations ---

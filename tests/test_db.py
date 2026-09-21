@@ -113,6 +113,7 @@ def test_review_logging_and_stats(temp_db):
 
     stats = temp_db.get_stats_summary(group_id=gid)
     assert stats["total_recent_reviews"] == 1
+    assert stats["total_review_attempts"] == 1
     assert stats["retention_rate"] == 100.0
 
 
@@ -894,6 +895,46 @@ def test_manual_mastery_and_reactivation(temp_db):
     session_words = temp_db.get_session_words(group_id=gid, limit=10)
     assert len(session_words) == 1
     assert session_words[0].id == wid
+
+
+def test_db_wal_mode_and_busy_timeout(temp_db):
+    """Test that disk-backed SQLite databases enable WAL mode and busy timeout."""
+    with temp_db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode")
+        mode = cursor.fetchone()[0].lower()
+        assert mode == "wal"
+
+        cursor.execute("PRAGMA busy_timeout")
+        timeout = cursor.fetchone()[0]
+        assert timeout == 10000
+
+
+def test_settings_operations(temp_db):
+    """Test get_setting and set_setting operations."""
+    assert temp_db.get_setting("non_existent") is None
+    assert temp_db.get_setting("non_existent", default="fallback") == "fallback"
+
+    temp_db.set_setting("theme", "dark")
+    assert temp_db.get_setting("theme") == "dark"
+
+    # Overwrite setting
+    temp_db.set_setting("theme", "light")
+    assert temp_db.get_setting("theme") == "light"
+
+
+def test_alternate_word_lists_delegation(temp_db):
+    """Test that Database._alternate_word_lists delegates to RecurrentSessionQueue._alternate_old_and_new."""
+    from vocab.models import Word
+    from vocab.srs import RecurrentSessionQueue
+
+    old_words = [Word(id=1, group_id=1, word="old1", definition="d1")]
+    new_words = [Word(id=2, group_id=1, word="new1", definition="d2")]
+
+    result = temp_db._alternate_word_lists(old_words, new_words)
+    expected = RecurrentSessionQueue._alternate_old_and_new(old_words, new_words)
+    assert result == expected
+
 
 
 

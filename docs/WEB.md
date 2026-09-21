@@ -38,7 +38,7 @@ storage, HTTPS, and persistent session storage before exposure.
 | Continuous add | Keep one deck selected, press Enter after each word, skip duplicates, and enrich missing definitions in the background |
 | Word editor | Definitions, phonetics, examples, memory cues, tags, deck moves, dictionary/Chinese lookup |
 | Decks | Create, rename, describe, choose terminal accent color, browse, study, delete |
-| Insights | Recall counts, composition, forecast, hourly activity, timing and hesitant words |
+| Insights | All-time and 7-day recall attempts, retention, streak, library stages, 7-day forecast, time-of-day summaries, hourly activity, response-time bands/outliers, hesitant words, and deck workload |
 | Vocabulary check | Offline curated items, OpenTDB, Datamuse, item levels, Wilson interval, saved results and deletion |
 | Data & settings | CSV/JSON import/export, timing threshold, starter decks, explicit history replay and outlier cleanup |
 | Research | Papers, scheduling equations, evidence and measurement limitations |

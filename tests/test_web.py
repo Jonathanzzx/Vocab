@@ -47,6 +47,9 @@ def test_browser_shell_and_read_views(web):
         assert client.get(url).status_code == 200
     dashboard = client.get("/api/dashboard").json
     assert dashboard["stats"]["total_words"] == 4
+    assert dashboard["stats"]["total_review_attempts"] == 0
+    assert len(dashboard["periods"]) == 4
+    assert "total_timed_reviews" in dashboard["latency"]
     assert list(dashboard["forecast"])[0] == "Today"
 
 
