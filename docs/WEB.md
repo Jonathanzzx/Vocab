@@ -32,8 +32,8 @@ storage, HTTPS, and persistent session storage before exposure.
 | Flashcards | Word-to-meaning recall, new-word introductions, reveal, four grades, interval previews |
 | Typing | Definition-to-word recall, exact/near/missed spelling feedback |
 | Recognition | Multiple-choice word selection; preserves recall schedules |
-| Session options | Initial limit, shuffle, upcoming cards, cram, newly due additions |
-| In-session controls | Edit/delete/retire current word, skip, shuffle, add due, finish |
+| Session options | Word limit, shuffle, upcoming cards, cram |
+| In-session controls | Edit/delete/retire current word, skip, shuffle, finish |
 | Library | Search, deck/state/POS/tag/due filters, sorting, pagination, review history |
 | Continuous add | Keep one deck selected, press Enter after each word, skip duplicates, and enrich missing definitions in the background |
 | Word editor | Definitions, phonetics, examples, memory cues, tags, deck moves, dictionary/Chinese lookup |
@@ -56,7 +56,7 @@ server. Shortcuts never fire while you are editing an ordinary form field.
 | Overview | `4`–`9` | Choose deck, add word, library, insights, decks, data/settings |
 | Flashcards | `Enter` | Introduce a new word, reveal, or continue |
 | Flashcards | `1`–`4` | Again, Hard, Good, Easy |
-| Flashcards | `s`, `a`, `e`, `d`, `q` | Shuffle, toggle auto-add, edit, delete, finish |
+| Flashcards | `s`, `e`, `d`, `q` | Shuffle, edit, delete, finish |
 | Recognition/check | `1`–`4`, `s`, `q` | Choose, shuffle when available, finish |
 | Typing answer | `:s`, `:shuffle`, `shuffle` | Shuffle the remaining queue |
 | Typing answer | `:q`, `quit`, `exit` | Finish the session |
@@ -83,8 +83,11 @@ count as recall attempts. Hard and Again cards return later in the session.
 Successful early reviews preserve their long-term schedule. Typing gives Good
 for exact recall and Hard for edit distance at most two, matching the terminal.
 
-The initial queue is bounded by the selected limit and the existing workload
-heuristic. Auto-add can extend it as other words become due. Response time is
+All three study modes use `create_study_queue` in `vocab/session_service.py`,
+shared with the terminal. Each session selects one batch bounded by the chosen
+word limit and workload heuristic. Introductions and difficult cards can repeat,
+but additional due words wait for the next session. Legacy auto-add options are
+accepted for compatibility and have no effect. Response time is
 measured by the server from card presentation to reveal/answer, so network time
 is included. Timing is descriptive and does not alter the SM-2 interval formula.
 Review forecasts use UTC calendar days, as in the shared database service.

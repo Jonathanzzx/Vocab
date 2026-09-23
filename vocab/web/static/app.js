@@ -429,7 +429,6 @@ function showShortcutsModal() {
             <li class="shortcuts-row"><span>Arrow Key Rating</span><div class="shortcut-keys"><kbd>←</kbd> <kbd>↓</kbd> <kbd>↑</kbd> <kbd>→</kbd></div></li>
             <li class="shortcuts-row"><span>Pronounce Word (Audio)</span><div class="shortcut-keys"><kbd>p</kbd> or <kbd>r</kbd></div></li>
             <li class="shortcuts-row"><span>Shuffle Queue</span><div class="shortcut-keys"><kbd>s</kbd></div></li>
-            <li class="shortcuts-row"><span>Auto-Add Toggle</span><div class="shortcut-keys"><kbd>a</kbd></div></li>
             <li class="shortcuts-row"><span>Edit / Delete Word</span><div class="shortcut-keys"><kbd>e</kbd> / <kbd>d</kbd></div></li>
             <li class="shortcuts-row"><span>Finish Session</span><div class="shortcut-keys"><kbd>q</kbd></div></li>
           </ul>
@@ -451,7 +450,7 @@ function showShortcutsModal() {
 }
 
 function sessionOptions(mode = 'flashcard') {
-  dialog('Set up your session', `<form id="session-options" class="form-grid"><label class="field full">Practice mode<select name="mode">${[['flashcard', 'Flashcards'], ['typing', 'Typing practice'], ['quiz', 'Recognition quiz']].map(([v, n]) => `<option value="${v}" ${mode === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><label class="field">Deck<select name="group_id">${options()}</select></label><label class="field">Maximum initial cards<input type="number" name="limit" min="1" max="100" value="20" required></label>${[['shuffle', 'Mix card order', true], ['fill_placeholders', 'Fill short sessions with upcoming cards', true], ['auto_add_due', 'Add newly due words as you continue', true], ['force_all', 'Cram: include words before their due date', false]].map(([key, label, checked]) => `<label class="check-label full"><input type="checkbox" name="${key}" ${checked ? 'checked' : ''}>${label}</label>`).join('')}<div class="notice full">Session size also respects the existing workload heuristic. Successful early reviews preserve their schedule. Quizzes record practice without changing SM-2 intervals.</div><div class="full form-actions"><button class="button">Begin session ${icon('arrow')}</button></div></form>`);
+  dialog('Set up your session', `<form id="session-options" class="form-grid"><label class="field full">Practice mode<select name="mode">${[['flashcard', 'Flashcards'], ['typing', 'Typing practice'], ['quiz', 'Recognition quiz']].map(([v, n]) => `<option value="${v}" ${mode === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><label class="field">Deck<select name="group_id">${options()}</select></label><label class="field">Maximum words<input type="number" name="limit" min="1" max="100" value="20" required></label>${[['shuffle', 'Mix card order', true], ['fill_placeholders', 'Fill short sessions with upcoming cards', true], ['force_all', 'Cram: include words before their due date', false]].map(([key, label, checked]) => `<label class="check-label full"><input type="checkbox" name="${key}" ${checked ? 'checked' : ''}>${label}</label>`).join('')}<div class="notice full">Each session uses a fixed batch within your workload budget. Difficult words may repeat; start another session for more words. Successful early reviews preserve their schedule. Quizzes record practice without changing SM-2 intervals.</div><div class="full form-actions"><button class="button">Begin session ${icon('arrow')}</button></div></form>`);
 }
 
 async function startSession(data) {
@@ -516,7 +515,7 @@ function studyHTML(d) {
         return `<button class="grade-button ${g.toLowerCase()}" data-action="grade" data-grade="${i + 1}"><b>${g}${S.keyboardControls ? ` <kbd>${i + 1}</kbd> <kbd>${letterKey}</kbd> <kbd>${arrowKey}</kbd>` : ''}</b><small>${esc(d.intervals[String(i + 1)])}</small></button>`;
       }).join('') : ''}
       ${d.phase === 'feedback' ? `<button class="button" data-action="study" data-op="next">Continue →${key('Enter')}</button>` : ''}
-    </div>${!check ? `<div class="study-bottom"><button class="button ghost" data-action="study" data-op="shuffle">Shuffle${key('s')}</button><button class="button ghost" data-action="study" data-op="auto_add">Auto-add: ${d.auto_add ? 'On' : 'Off'}${key('a')}</button><button class="button ghost" data-action="study" data-op="add_due">Add due now</button><button class="button ghost" data-action="edit-word" data-id="${c.id}">Edit${key('e')}</button><button class="button ghost" data-action="delete-word" data-id="${c.id}">Delete${key('d')}</button><button class="button ghost" data-action="study" data-op="skip">Skip card</button></div>` : ''}
+    </div>${!check ? `<div class="study-bottom"><button class="button ghost" data-action="study" data-op="shuffle">Shuffle${key('s')}</button><button class="button ghost" data-action="edit-word" data-id="${c.id}">Edit${key('e')}</button><button class="button ghost" data-action="delete-word" data-id="${c.id}">Delete${key('d')}</button><button class="button ghost" data-action="study" data-op="skip">Skip card</button></div>` : ''}
     ${keyboardGuide(d)}</div>`;
 }
 
@@ -539,8 +538,6 @@ async function studyAction(data) {
   const d = await api(`sessions/${S.sid}`, { method: 'POST', data: { token: S.session.token, ...data } });
   renderStudy(d);
   if (data.action === 'shuffle') toast('Queue shuffled.');
-  if (data.action === 'add_due') toast('Newly due words added, when available.');
-  if (data.action === 'set_auto_add') toast(`Auto-add is ${d.auto_add ? 'on' : 'off'}.`);
 }
 
 async function wordEditor(id, chosenGroup = S.group) {
@@ -644,8 +641,7 @@ document.addEventListener('click', event => {
     }
     else if (action === 'study') {
       if (op === 'end' && !confirm('Finish this session? Completed responses are saved.')) return;
-      if (op === 'auto_add') await studyAction({ action: 'set_auto_add', enabled: !S.session.auto_add });
-      else await studyAction({ action: op });
+      await studyAction({ action: op });
     }
     else if (action === 'grade') await studyAction({ action: 'grade', grade: Number(grade) });
     else if (action === 'choice') await studyAction({ action: 'answer', choice: Number(b.dataset.index) });
@@ -716,7 +712,7 @@ document.addEventListener('submit', event => {
       await renderLibraryTable();
     }
     else if (form.id === 'session-options') {
-      for (const key of ['shuffle', 'fill_placeholders', 'auto_add_due', 'force_all']) values[key] = form.elements[key].checked;
+      for (const key of ['shuffle', 'fill_placeholders', 'force_all']) values[key] = form.elements[key].checked;
       values.limit = Number(values.limit);
       await startSession(values);
     }
@@ -1094,7 +1090,6 @@ document.addEventListener('keydown', event => {
 
   // Study actions
   if (pressed === 's' && ['flashcard', 'quiz'].includes(S.session?.mode)) selector = '[data-op="shuffle"]';
-  if (pressed === 'a' && S.session?.mode === 'flashcard' && S.session?.phase !== 'revealed') selector = '[data-op="auto_add"]';
   if (pressed === 'e' && S.session?.mode === 'flashcard' && S.session?.phase !== 'revealed') selector = '[data-action="edit-word"]';
   if (pressed === 'd' && S.session?.mode === 'flashcard' && S.session?.phase !== 'revealed') selector = '[data-action="delete-word"]';
   if (pressed === 'q') selector = '[data-op="end"]';

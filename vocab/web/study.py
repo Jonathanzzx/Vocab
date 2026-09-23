@@ -7,7 +7,8 @@ import random
 
 from werkzeug.exceptions import BadRequest, Conflict
 from vocab.models import SRSGrade, SessionStats
-from vocab.srs import SRSEngine, RecurrentSessionQueue, rate_session_quality
+from vocab.srs import SRSEngine, rate_session_quality
+from vocab.session_service import create_study_queue
 from vocab.sessions.typing_session import _levenshtein_distance
 from vocab.test_service import VocabTestService
 
@@ -19,14 +20,11 @@ class StudySession:
         if self.mode not in ("flashcard", "typing", "quiz"):
             raise BadRequest("Choose flashcards, typing, or quiz.")
         self.group_id = options.get("group_id")
-        self.auto_add = options.get("auto_add_due", True)
-        words = db.get_session_words(self.group_id, limit=options["limit"],
+        self.queue = create_study_queue(db, self.group_id, limit=options["limit"],
             force_all=options.get("force_all", False),
-            fill_placeholders=options.get("fill_placeholders", True))
-        self.queue = RecurrentSessionQueue(words, enable_shuffling=options.get("shuffle", True),
-            previous_sequence=db.get_recent_review_sequence(self.group_id))
-        self.total_added = len(words)
-        self.seen = {w.id for w in words}
+            fill_placeholders=options.get("fill_placeholders", True),
+            shuffle=options.get("shuffle", True))
+        self.total_added = self.queue.total_initial
         self.stats = SessionStats()
         self.current = None
         self.phase = "ready"
@@ -34,13 +32,6 @@ class StudySession:
         self.feedback = None
         self.quality = None
         self.next()
-
-    def add_due(self):
-        words = self.db.get_newly_due_words(self.group_id, exclude_word_ids=self.seen, limit=20)
-        self.seen.update(w.id for w in words)
-        added = self.queue.add_cards(words)
-        self.total_added += added
-        return added
 
     def next(self):
         if self.phase == "done":
@@ -78,7 +69,7 @@ class StudySession:
             "remaining": remaining, "removed": len(self.queue.completed_word_ids),
             "initial": self.queue.total_initial, "completed": len(self.queue.completed_word_ids),
             "total_added": self.total_added,
-            "auto_add": self.auto_add,
+            "auto_add": False,  # Compatibility for older browser clients.
             "reviews": self.stats.total_reviews, "retention": self.stats.retention_rate,
             "average_seconds": self.stats.avg_thought_time, "feedback": self.feedback,
             "grades": {"Again": self.stats.again_count, "Hard": self.stats.hard_count,
@@ -108,20 +99,11 @@ class StudySession:
         if action == "shuffle":
             self.queue.shuffle_remaining()
             return self.view()
-        if action == "add_due":
-            self.add_due()
-            return self.view()
-        if action == "set_auto_add":
-            enabled = data.get("enabled")
-            if type(enabled) is not bool:
-                raise BadRequest("Auto-add must be true or false.")
-            self.auto_add = enabled
-            return self.view()
+        if action in ("add_due", "set_auto_add"):
+            raise Conflict("Sessions use a fixed batch. Start a new session for more due words.")
         if data.get("token") != self.token:
             raise Conflict("This card has already changed. Refresh the session.")
         if action == "next" and self.phase == "feedback":
-            if self.auto_add:
-                self.add_due()
             self.next()
             return self.view()
         if action == "skip":

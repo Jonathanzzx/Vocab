@@ -9,7 +9,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.box import ROUNDED
 from vocab.models import Word, SRSGrade, SessionStats, CardState
-from vocab.srs import SRSEngine, RecurrentSessionQueue
+from vocab.srs import SRSEngine
+from vocab.session_service import create_study_queue
 from vocab.db import Database
 from vocab.ui.theme import console, render_header, pause_prompt
 from vocab.ui.card_views import render_flashcard_front, render_flashcard_back
@@ -27,23 +28,21 @@ def run_flashcard_session(
 ) -> SessionStats:
     """
     Executes an interactive flashcard review session.
-    Cards are scheduled adaptively, placeholders backfill short sessions,
-    and cards can be dynamically added as they become due.
+    Cards are selected once within the workload budget; placeholders backfill
+    short sessions and repeated attempts stay within the selected batch.
     """
     stats = SessionStats(start_time=datetime.now(timezone.utc))
 
-    # Resolve auto_add_due setting from DB if not explicitly passed
-    if auto_add_due is None:
-        setting_val = db.get_setting("auto_add_due", default="true")
-        auto_add_due = setting_val.lower() in ("true", "1", "yes")
-
-    # Fetch session words (due words + placeholders if needed)
-    words = db.get_session_words(
+    # auto_add_due remains accepted for compatibility; sessions use a fixed batch.
+    queue = create_study_queue(
+        db,
         group_id=group_id,
         limit=limit,
         force_all=force_all,
-        fill_placeholders=fill_placeholders
+        fill_placeholders=fill_placeholders,
+        shuffle=shuffle,
     )
+    words = queue.queue
 
     if not words:
         render_header("Flashcard Review")
@@ -87,14 +86,6 @@ def run_flashcard_session(
         console.print(f"[dim cyan]ℹ Session loaded: {parts_str}{opt_info}[/dim cyan]\n")
     time.sleep(0.4)
 
-    recent_seq = db.get_recent_review_sequence(group_id=group_id, limit=40)
-    queue = RecurrentSessionQueue(
-        words,
-        reinsert_offset=3,
-        enable_shuffling=shuffle,
-        enable_interleaving=shuffle,
-        previous_sequence=recent_seq
-    )
     group_obj = db.get_group_by_id(group_id) if group_id else None
     deck_name = group_obj.name if group_obj else "All Groups"
 

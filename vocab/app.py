@@ -281,13 +281,13 @@ def main() -> None:
         dest="auto_add_due",
         action="store_true",
         default=None,
-        help="Automatically add cards to the session as they become due (default: on)"
+        help="Deprecated compatibility option; sessions always use a fixed batch"
     )
     parser.add_argument(
         "--no-auto-add-due",
         dest="auto_add_due",
         action="store_false",
-        help="Do not add cards to session as they become due"
+        help="Compatibility option; sessions always use a fixed batch"
     )
     parser.add_argument(
         "--placeholders",

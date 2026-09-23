@@ -30,8 +30,7 @@ def post(web, path, data):
 
 
 def start(web, **options):
-    response = post(web, "sessions", {"group_id": web[4], "limit": 1, "shuffle": False,
-                                     "auto_add_due": False, **options})
+    response = post(web, "sessions", {"group_id": web[4], "limit": 1, "shuffle": False, **options})
     assert response.status_code == 201, response.json
     return response.json
 
@@ -270,15 +269,69 @@ def test_settings_and_explicit_maintenance(web):
         assert result.status_code == 200, result.json
 
 
-def test_session_auto_add_can_be_changed_without_advancing_card(web):
+@pytest.mark.parametrize("action", ["add_due", "set_auto_add"])
+def test_legacy_controls_cannot_expand_session(web, action):
     state = start(web, mode="flashcard", auto_add_due=True)
     card_id, token = state["card"]["id"], state["token"]
-    response = act(web, state, "set_auto_add", enabled=False)
-    assert response.status_code == 200
-    updated = response.json
+    response = act(web, state, action, enabled=True)
+    assert response.status_code == 409
+    updated = web[1].get(f"/api/sessions/{state['id']}").json
     assert updated["auto_add"] is False
     assert updated["card"]["id"] == card_id and updated["token"] == token
-    assert act(web, updated, "set_auto_add", enabled="false").status_code == 400
+    assert updated["total_added"] == updated["initial"] == 1
+
+
+@pytest.mark.parametrize("mode", ["flashcard", "typing", "quiz"])
+@pytest.mark.parametrize("limit,expected_size", [(1, 1), (20, 3)])
+@pytest.mark.parametrize("legacy_options", [{}, {"auto_add_due": True}])
+def test_sessions_finish_within_initial_batch_despite_due_backlog(web, mode, limit, expected_size, legacy_options):
+    from vocab.session_service import create_study_queue
+
+    db, gid = web[3:5]
+    db.set_setting("capacity_threshold", "60")
+    for i in range(10):
+        db.add_word(gid, f"backlog-{i}", "Meaning")
+    queue = create_study_queue(db, gid, limit=limit, shuffle=False)
+    selected_ids = {word.id for word in queue.queue}
+    assert len(selected_ids) == expected_size
+    assert sum(word.brain_capacity for word in queue.queue) <= 60
+
+    state = start(web, mode=mode, limit=limit, **legacy_options)
+    # Even new material added after launch must wait for the next session.
+    db.add_word(gid, "added-during-session", "Meaning")
+    seen = set()
+    missed_once = False
+    for _ in range(40):
+        assert state["total_added"] == state["initial"] == expected_size
+        if state["phase"] == "done":
+            break
+        wid = state["card"]["id"]
+        assert wid in selected_ids
+        seen.add(wid)
+        if state["phase"] == "introduction":
+            response = act(web, state, "introduce")
+        elif state["phase"] == "feedback":
+            response = act(web, state, "next")
+        elif mode == "flashcard" and state["phase"] == "question":
+            response = act(web, state, "reveal")
+        else:
+            word = db.get_word_by_id(wid)
+            if mode == "flashcard":
+                response = act(web, state, "grade", grade=3 if missed_once else 1)
+            elif mode == "typing":
+                response = act(web, state, "answer", answer=word.word if missed_once else "incorrect-answer")
+            else:
+                correct = state["choices"].index(word.word)
+                choice = correct if missed_once else (correct + 1) % len(state["choices"])
+                response = act(web, state, "answer", choice=choice)
+            missed_once = True
+        assert response.status_code == 200, response.json
+        state = response.json
+    assert state["phase"] == "done"
+    assert seen == selected_ids
+    assert state["completed"] == expected_size
+    assert state["grades"]["Again"] == 1
+    assert state["reviews"] > expected_size
 
 
 def test_retired_words_excluded_from_forecast(web):
