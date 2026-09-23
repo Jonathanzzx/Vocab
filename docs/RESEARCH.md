@@ -8,7 +8,7 @@ diagnose fatigue, certify CEFR proficiency, or guarantee a retention percentage.
 | Source | Finding used here | Implementation |
 | --- | --- | --- |
 | Cepeda et al. (2006), *Distributed practice in verbal recall tasks: A review and quantitative synthesis*, Psychological Bulletin 132, 354–380. [Paper](https://www.escholarship.org/content/qt3rr6q10c/qt3rr6q10c.pdf), [DOI](https://doi.org/10.1037/0033-2909.132.3.354) | Distributed practice generally benefits delayed recall. Effective spacing depends on the intended retention interval. | Schedule future reviews; distinguish early practice from due reviews. The paper does not specify this app's minute steps, queue positions or interval multipliers. |
-| Karpicke & Roediger (2008), *The Critical Importance of Retrieval for Learning*, Science 319, 966–968. [Paper](https://learninglab.psych.purdue.edu/downloads/2008/2008_Karpicke_Roediger_Science.pdf), [DOI](https://doi.org/10.1126/science.1152408) | Repeated retrieval of foreign-language vocabulary improved delayed recall in the studied conditions. | Recall before revealing an answer; keep successful words in future reviews. Correct answers do not trigger automatic retirement. |
+| Karpicke & Roediger (2008), *The Critical Importance of Retrieval for Learning*, Science 319, 966–968. [Paper](https://learninglab.psych.purdue.edu/downloads/2008/2008_Karpicke_Roediger_Science.pdf), [DOI](https://doi.org/10.1126/science.1152408) | Repeated retrieval of foreign-language vocabulary improved delayed recall in the studied conditions. | Recall before revealing an answer. The app's retirement threshold is a separate product policy, not a result established by this paper. |
 | Woźniak & Gorzelańczyk (1994), *Optimization of repetition spacing in the practice of learning*, Acta Neurobiologiae Experimentalis 54, 59–62. [Paper and abstract](https://ane.pl/index.php/ane/article/view/1003) | Investigates growing repetition intervals in paired-associate learning. | Background for adaptive spacing; this paper is not the specification of the implemented SM-2 equations. |
 | Woźniak (1990), *Optimization of learning*, section 3.2. [Author's SM-2 specification](https://www.super-memory.org/archive/english/ol/sm2.htm) | Defines an auditable item-level interval and ease-factor algorithm. | Exact long-term recurrence in `vocab/scheduler.py`, with the explicit application policies below. SM-2's parameters are heuristic, not individually fitted coefficients. |
 | Wilson (1927), *Probable Inference, the Law of Succession, and Statistical Inference*, JASA 22, 209–212. [DOI](https://doi.org/10.1080/01621459.1927.10502953) | Score interval for a binomial proportion. | `vocab/measurement.py` reports a 95% Wilson interval for practice-test accuracy. Independence is an approximation; the interval does not correct biased item selection, guessing or repeated exposure. |
@@ -51,8 +51,10 @@ interval jitter, so previews and saved schedules use the same calculation.
   configurable display policy, not evidence of distraction. New raw timings
   are preserved; explicit cleanup remains available for legacy maintenance.
 - Session workload points, automatic batch sizing, queue mixing, interval
-  bands (21 days), and suggested batch times remain convenience heuristics.
-  They have not been validated as cognitive capacity or optimal study timing.
+  bands (21 days), suggested batch times, and automatic retirement after a
+  successful recall at the minimum 1-point workload remain convenience
+  heuristics. They have not been validated as cognitive capacity, permanent
+  mastery, or optimal study timing.
 
 ## Measurement and limits
 
@@ -74,9 +76,11 @@ not a fitted FSRS model, and is not used to set review intervals or rank the que
 ## Existing data
 
 Launching Vocab does not replay history or clean timing data automatically.
-Existing due dates remain until you review a card. Already retired cards stay
-retired; use the word editor to reactivate them if desired. New reviews use
-SM-2 from the stored interval, repetition count and ease factor.
+When a study session starts, established 1-point cards whose latest recall was
+Good or Easy are retired before its queue is built. Existing due dates otherwise
+remain until you review a card. Already retired cards stay retired; use the word
+editor to reactivate them if desired. New reviews use SM-2 from the stored
+interval, repetition count and ease factor.
 
 Explicit history synchronization recalculates from a fixed new-card baseline
 using the same scheduler as live reviews. It is deterministic and can change

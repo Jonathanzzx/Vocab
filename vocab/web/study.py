@@ -153,11 +153,19 @@ class StudySession:
                 self.db.update_word(updated)
             self.db.log_review(saved.id, int(grade), mode, days, elapsed_seconds=seconds,
                 thought_time_seconds=seconds, card_state=saved.state, now=now)
+            mastered = None if intro else self.db.check_and_update_mastery(saved.id)
+        if mastered:
+            updated = mastered
         self.current = updated
         if intro:
             self.queue.requeue_card(updated, custom_offset=3)
+        elif mastered:
+            self.queue.completed_word_ids.add(updated.id)
+            self.queue.completed_words[updated.id] = updated
+            self.stats.mastered_count += 1
         else:
             self.queue.handle_result(updated, grade, effective_seconds)
+        if not intro:
             self.stats.total_reviews += 1
             name = {1: "again_count", 2: "hard_count", 3: "good_count", 4: "easy_count"}[int(grade)]
             setattr(self.stats, name, getattr(self.stats, name) + 1)
@@ -166,7 +174,8 @@ class StudySession:
                 self.stats.total_thought_time += seconds
         self.feedback = {"grade": grade.name.title(), "introduced": intro,
             "message": "Added to this session for recall." if intro else
-                       ("Practice recorded; review schedule preserved." if self.mode == "quiz" else "Review saved."),
+                       ("Retired automatically at 1 workload point." if mastered else
+                        ("Practice recorded; review schedule preserved." if self.mode == "quiz" else "Review saved.")),
             "seconds": round(seconds, 1), "due": updated.due_date}
         self.phase = "feedback"
         return self.view()

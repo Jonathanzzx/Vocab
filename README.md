@@ -62,7 +62,8 @@ The scheduler uses the published **SM-2 interval and ease equations**, with
 explicit short learning steps. Spacing and retrieval practice are informed by
 Cepeda et al. (2006) and Karpicke & Roediger (2008). Response time does not change
 intervals, early successful practice preserves due dates, and quick answers
-never retire a card automatically.
+retire an established card once its workload reaches the minimum 1 point.
+Again and Hard answers never trigger automatic retirement.
 
 Read [Learning methods and evidence](docs/RESEARCH.md) for papers, equations,
 parameter choices, measurement limits, and legacy-data behavior. Workload

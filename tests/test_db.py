@@ -868,6 +868,36 @@ def test_check_and_update_mastery_and_session_exclusion(temp_db):
     assert stats["mastered_count"] == 1
 
 
+@pytest.mark.parametrize("grade,retired", [
+    (SRSGrade.GOOD, True),
+    (SRSGrade.EASY, True),
+    (SRSGrade.HARD, False),
+    (SRSGrade.AGAIN, False),
+])
+def test_one_point_word_retires_only_after_successful_recall(temp_db, grade, retired):
+    gid = temp_db.create_group(f"One Point {grade.name}")
+    wid = temp_db.add_word(gid, f"word-{grade.name.lower()}", "Meaning")
+    word = temp_db.get_word_by_id(wid)
+    word.state = CardState.REVIEW.value
+    word.reps = 2
+    word.difficulty = 1.0
+    temp_db.update_word(word)
+    temp_db.log_review(
+        word_id=wid,
+        grade=int(grade),
+        review_mode="flashcard",
+        scheduled_days=10,
+        elapsed_seconds=1,
+        thought_time_seconds=1,
+        card_state=CardState.REVIEW.value,
+    )
+
+    result = temp_db.check_and_update_mastery(wid)
+    assert (result is not None) is retired
+    assert temp_db.get_word_by_id(wid).state == (
+        CardState.MASTERED.value if retired else CardState.REVIEW.value
+    )
+
 def test_manual_mastery_and_reactivation(temp_db):
     """
     Test that words can be manually marked as mastered (retired) and reactivated for review,

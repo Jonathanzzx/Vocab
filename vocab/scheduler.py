@@ -132,8 +132,12 @@ class SRSEngine:
 
     @staticmethod
     def is_mastery_eligible(word, recent_logs=None):
-        """Retirement is a user decision, never inferred from quick answers."""
-        return word.state == "mastered"
+        """Retire established one-point cards after a successful recall."""
+        if word.state == CardState.MASTERED.value:
+            return True
+        if word.state != CardState.REVIEW.value or word.brain_capacity != 1 or not recent_logs:
+            return False
+        return SRSGrade(recent_logs[-1].grade) in (SRSGrade.GOOD, SRSGrade.EASY)
 
     @classmethod
     def preview_intervals(cls, word, now=None):

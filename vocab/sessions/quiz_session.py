@@ -178,7 +178,7 @@ def run_quiz_session(
             card_state=current_word.state
         )
 
-        # Check Mastery Qualification (Criterion A or Criterion B)
+        # Retire established one-point cards after successful recall.
         mastered_word = db.check_and_update_mastery(current_word.id)
         is_mastered = (mastered_word is not None and mastered_word.state == CardState.MASTERED.value)
 

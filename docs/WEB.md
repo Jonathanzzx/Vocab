@@ -86,8 +86,9 @@ for exact recall and Hard for edit distance at most two, matching the terminal.
 All three study modes use `create_study_queue` in `vocab/session_service.py`,
 shared with the terminal. Each session selects one batch bounded by the chosen
 word limit and workload heuristic. Introductions and difficult cards can repeat,
-but additional due words wait for the next session. Legacy auto-add options are
-accepted for compatibility and have no effect. Response time is
+but additional due words wait for the next session. Established cards retire
+automatically after a successful recall at the minimum 1-point workload. Legacy
+auto-add options are accepted for compatibility and have no effect. Response time is
 measured by the server from card presentation to reveal/answer, so network time
 is included. Timing is descriptive and does not alter the SM-2 interval formula.
 Review forecasts use UTC calendar days, as in the shared database service.

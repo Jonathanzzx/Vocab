@@ -151,6 +151,29 @@ def test_session_progress_counts_words_removed_from_active_queue(web):
     assert graded["total_added"] == graded["initial"]
 
 
+def test_successful_one_point_card_retires_in_browser_session(web):
+    db = web[3]
+    word = db.get_word_by_id(1)
+    for other in db.get_words(group_id=web[4]):
+        if other.id != word.id:
+            db.set_word_mastery(other.id, True)
+    word.state = "review"
+    word.reps = 2
+    word.difficulty = 1.0
+    word.due_date = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+    word.last_reviewed = datetime.now(timezone.utc).isoformat()
+    db.update_word(word)
+
+    state = start(web, mode="flashcard")
+    state = act(web, state, "reveal").json
+    graded = act(web, state, "grade", grade=int(SRSGrade.EASY)).json
+
+    assert db.get_word_by_id(word.id).state == "mastered"
+    assert graded["completed"] == 1
+    assert graded["feedback"]["message"] == "Retired automatically at 1 workload point."
+    assert act(web, graded, "next").json["phase"] == "done"
+
+
 @pytest.mark.parametrize("answer,grade", [("evidence", "Good"), ("evidenc", "Hard"), ("wrong", "Again")])
 def test_typing_grades_and_requeues(web, answer, grade):
     state = start(web, mode="typing")

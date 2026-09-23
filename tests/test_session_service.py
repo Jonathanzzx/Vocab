@@ -6,7 +6,25 @@ import pytest
 from rich.console import Console
 
 from vocab.db import Database
+from vocab.session_service import create_study_queue
 from vocab.web.study import StudySession
+
+
+def test_queue_creation_retires_existing_successful_one_point_cards(tmp_path):
+    db = Database(str(tmp_path / "library.db"))
+    gid = db.create_group("Study")
+    wid = db.add_word(gid, "fluent", "Meaning")
+    word = db.get_word_by_id(wid)
+    word.state = "review"
+    word.reps = 2
+    word.difficulty = 1.0
+    db.update_word(word)
+    db.log_review(wid, 4, "flashcard", 20, thought_time_seconds=1)
+
+    queue = create_study_queue(db, gid, shuffle=False)
+
+    assert db.get_word_by_id(wid).state == "mastered"
+    assert queue.total_initial == 0
 
 
 @pytest.mark.parametrize("mode,renderer", [
