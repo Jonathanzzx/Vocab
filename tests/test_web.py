@@ -422,3 +422,19 @@ def test_sync_endpoint_and_revision_tracking(web):
     updated = client.get(f"/api/sync?since={initial['revision']}").json
     assert updated["changed"] is True
     assert updated["revision"] > initial["revision"]
+
+def test_https_gateway_session_cookie_is_secure(tmp_path):
+    app = create_app(str(tmp_path / "secure-library.db"), testing=True, seed=False, cookie_secure=True)
+    response = app.test_client().get("/")
+    cookie = response.headers["Set-Cookie"]
+    assert "; Secure" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=Strict" in cookie
+
+
+def test_local_http_session_cookie_remains_usable(tmp_path):
+    app = create_app(str(tmp_path / "local-library.db"), testing=True, seed=False)
+    response = app.test_client().get("/")
+    cookie = response.headers["Set-Cookie"]
+    assert "; Secure" not in cookie
+    assert "HttpOnly" in cookie

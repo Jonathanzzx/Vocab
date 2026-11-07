@@ -20,7 +20,7 @@ the terminal app. To select a different library or port:
 python main.py web --db "D:\Vocabulary\library.db" --port 8767
 ```
 
-The server binds to `127.0.0.1`. This version is a single-user local application.
+The server binds to `127.0.0.1`. For an authenticated HTTPS reverse proxy that forwards to this loopback service, set `VOCAB_WEB_COOKIE_SECURE=1` in the Vocab server process so its session cookie is marked Secure. The proxy should forward Vocab on its own origin at the root path and set the upstream Host to `127.0.0.1` or `localhost`; the UI uses root-relative `/api/` and `/static/` paths. This version is a single-user local application.
 A public or multi-user deployment would need authentication, user-specific data
 storage, HTTPS, and persistent session storage before exposure.
 

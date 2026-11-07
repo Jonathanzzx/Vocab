@@ -7,6 +7,7 @@ from time import monotonic
 import csv
 import io
 import json
+import os
 import secrets
 import sqlite3
 import tempfile
@@ -37,13 +38,14 @@ class JSONProvider(DefaultJSONProvider):
         return DefaultJSONProvider.default(value)
 
 
-def create_app(db_path=None, *, testing=False, seed=True):
+def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
     app = Flask(__name__)
     app.json = JSONProvider(app)
     app.json.sort_keys = False
     app.config.update(SECRET_KEY=secrets.token_hex(32), TESTING=testing,
         MAX_CONTENT_LENGTH=5 * 1024 * 1024, SESSION_COOKIE_SAMESITE="Strict",
-        SESSION_COOKIE_HTTPONLY=True, TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]"])
+        SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=bool(cookie_secure),
+        TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]"])
     db = WebDatabase(db_path)
     app.extensions["vocab_db"] = db
     active, lock = {}, RLock()
@@ -389,6 +391,9 @@ def run_web(db_path=None, port=8766):
     from waitress import serve
     if not 1 <= port <= 65535:
         raise ValueError("Port must be between 1 and 65535.")
-    app = create_app(db_path)
+    # TLS terminates at the authenticated gateway before requests reach this
+    # loopback-only server. Enable Secure cookies explicitly for that setup.
+    secure_cookie = os.environ.get("VOCAB_WEB_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes", "on")
+    app = create_app(db_path, cookie_secure=secure_cookie)
     print(f"Vocab web: http://127.0.0.1:{port}\nDatabase: {app.extensions['vocab_db'].db_path}\nPress Ctrl+C to stop.", flush=True)
     serve(app, host="127.0.0.1", port=port, threads=6)
