@@ -1,0 +1,13 @@
+{
+  "format": 2,
+  "version": "1.1.0",
+  "cssSha256": "787ff985e0216bafb11c629f198ceba7aeb84d95aefa66aa9d35619dec299713",
+  "jsSha256": "fe686f5e08ddc3d8be6e75af680e37774812858d5523487c2bd6da319e3cd4ac",
+  "files": {
+    "app.js": "0351f4c0a7691330f898827474c88e607c36d7f96574f8fdff7952b294c043a8",
+    "ecosystem.css": "787ff985e0216bafb11c629f198ceba7aeb84d95aefa66aa9d35619dec299713",
+    "ecosystem.js": "fe686f5e08ddc3d8be6e75af680e37774812858d5523487c2bd6da319e3cd4ac",
+    "favicon.svg": "decad4755a6f6ec036712285ada49d51b0f910a1f7df8fe20b06a2b0162e0dc9",
+    "styles.css": "e6d86ab32fd60fa1ef62cfa1f6f7a008df4cab4c906c72c6e9db347af3fe88b7"
+  }
+}

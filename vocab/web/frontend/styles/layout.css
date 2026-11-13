@@ -1,0 +1,36 @@
+/* App-specific page patterns; shared components live in design-system. */
+.eco-vocab #content { padding: 32px 0; max-width: 1120px; }
+.eco-vocab .footer { padding: 24px 0; font-size: 13px; }
+.eco-vocab .scope { flex-wrap: wrap; }
+.eco-vocab .sidebar-shortcuts-btn { color: var(--eco-muted) !important; border-color: var(--eco-line) !important; }
+.eco-vocab .sidebar-shortcuts-btn:hover { color: var(--eco-text) !important; background: var(--eco-subtle) !important; }
+.eco-vocab .hero { background: var(--eco-canvas); color: var(--eco-text); border-color: var(--eco-line); padding: 32px; }
+.eco-vocab .hero-graphic { display: none; }
+.eco-vocab :is(.metric, .mode-card, .deck-card) { box-shadow: none; transform: none; }
+.eco-vocab .deck-grid { display: flex; flex-direction: column; gap: 0; }
+.eco-vocab .deck-card { padding: 24px 0; border: 0; border-bottom: 1px solid var(--eco-line); border-radius: 0; background: transparent; }
+.eco-vocab .deck-card h3 { margin-top: 0; }
+.eco-vocab :is(.deck-card, .mode-card):hover { transform: none; box-shadow: none; }
+.eco-vocab .connection-dot { animation: none; box-shadow: none; }
+.eco-vocab .settings-row > div { width: 100%; }
+.eco-vocab .eco-study-start { max-width: 760px; margin-bottom: 40px; }
+.eco-vocab .eco-study-start p { margin: 12px 0 24px; }
+.eco-vocab .eco-practice-list { max-width: 760px; margin-bottom: 24px; }
+.eco-vocab .eco-practice-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 80px; padding: 20px 0; border: 0; border-bottom: 1px solid var(--eco-line); background: transparent; color: var(--eco-text); text-align: left; }
+.eco-vocab .eco-practice-row:hover { background: var(--eco-canvas); }
+.eco-vocab .eco-practice-row > span { flex: 1; min-width: 0; }
+.eco-vocab .eco-practice-row strong { display: block; font-size: 16px; font-weight: 500; }
+.eco-vocab .eco-practice-row small { display: block; margin-top: 4px; }
+.eco-vocab .eco-key-guide { max-width: 760px; }
+.eco-vocab .eco-key-guide summary { min-height: 44px; padding: 12px 0; color: var(--eco-muted); }
+.eco-vocab .eco-forecast { margin-top: 32px; }
+@media (max-width: 760px) {
+.eco-vocab .scope { width: 100%; gap: 8px; }
+.eco-vocab .scope select { min-width: 120px; max-width: 100%; }
+.eco-vocab #content, .eco-tasks .content { padding-top: 24px; }
+.eco-vocab .hero { padding: 24px; }
+}
+
+.eco-vocab #settings-content .page-heading { margin-top: 0; }
+
+.eco-vocab .eco-dialog #toast { position: sticky; bottom: 0; left: auto; transform: none; max-width: 100%; }

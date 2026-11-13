@@ -5,6 +5,7 @@ __pycache__/
 
 # Testing and coverage
 .pytest_cache/
+.pytest_temp/
 .coverage
 htmlcov/
 

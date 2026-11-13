@@ -1,0 +1,218 @@
+:root {
+  --eco-canvas: #f7f7f5;
+  --eco-surface: #ffffff;
+  --eco-subtle: #efefed;
+  --eco-text: #242424;
+  --eco-muted: #62625f;
+  --eco-line: #dededa;
+  --eco-control-border: #858580;
+  --eco-focus: #52524e;
+  --eco-success: #356347;
+  --eco-success-soft: #edf3ee;
+  --eco-warning: #805e17;
+  --eco-warning-soft: #f7f1e4;
+  --eco-error: #a33434;
+  --eco-error-soft: #faeeee;
+  --eco-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --eco-font-mono: 'Cascadia Code', Consolas, monospace;
+  --eco-control-radius: 8px;
+  --eco-surface-radius: 12px;
+  --eco-sidebar-width: 224px;
+  --eco-form-width: 760px;
+  --eco-space-1: 4px;
+  --eco-space-2: 8px;
+  --eco-space-3: 12px;
+  --eco-space-4: 16px;
+  --eco-space-6: 24px;
+  --eco-space-8: 32px;
+  --eco-space-12: 48px;
+  --eco-backdrop: rgb(36 36 36 / 22%);
+  --eco-floating-shadow: 0 4px 20px rgb(36 36 36 / 12%);
+  --eco-indicator: #52524e;
+  --eco-chart-low: #d8d8d3;
+  --eco-chart-mid: #b4b4ad;
+}
+/* Shared visual foundations. Domain styles follow this generated block. */
+.eco-app {
+  margin: 0; display: block; background: var(--eco-surface); color: var(--eco-text);
+  font: 400 16px/1.5 var(--eco-font-sans); color-scheme: light;
+  --bg: var(--eco-canvas); --paper: var(--eco-surface); --ink: var(--eco-text);
+  --muted: var(--eco-muted); --line: var(--eco-line); --border: var(--eco-line);
+  --accent: var(--eco-text); --accent-strong: var(--eco-text); --accent-soft: var(--eco-subtle);
+  --accent-wash: var(--eco-subtle); --green: var(--eco-text); --lime: var(--eco-subtle);
+  --sidebar: var(--eco-canvas); --red: var(--eco-error); --gold: var(--eco-warning);
+  --panel: var(--eco-surface); --soft: var(--eco-canvas); --navy: var(--eco-text);
+  --shadow: none; --radius: var(--eco-surface-radius);
+  --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-spring: cubic-bezier(.16, 1, .3, 1);
+  --font-sans: var(--eco-font-sans); --font-serif: var(--eco-font-sans); --mono: var(--eco-font-mono);
+}
+.eco-app *, .eco-app *::before, .eco-app *::after { box-sizing: border-box; }
+.eco-app [hidden] { display: none !important; }
+.eco-app :is(button, input, select, textarea) { font-family: inherit; }
+.eco-app :is(button, a, input, select, textarea, summary) { touch-action: manipulation; }
+.eco-app :is(button, summary) { cursor: pointer; }
+.eco-app :is(button, a, input, textarea, select, summary):focus-visible { outline: 2px solid var(--eco-focus); outline-offset: 3px; }
+.eco-app button:disabled { cursor: not-allowed; opacity: .55; }
+.eco-app :is(h1, h2, h3, p) { margin-top: 0; }
+.eco-app h1 { font: 600 28px/36px var(--eco-font-sans); letter-spacing: -.5px; margin-bottom: 8px; }
+.eco-app h2 { font: 600 18px/26px var(--eco-font-sans); letter-spacing: normal; margin-bottom: 12px; }
+.eco-app h3 { font: 600 16px/24px var(--eco-font-sans); letter-spacing: normal; margin-bottom: 8px; }
+.eco-app p { font-size: 16px; line-height: 1.6; }
+.eco-app :is(small, .help, .subtle, .muted-text) { font-size: 13px; line-height: 1.55; color: var(--eco-muted); }
+.eco-app :is(code, pre) { font-family: var(--eco-font-mono); }
+.eco-app .icon { width: 20px; height: 20px; stroke-width: 1.6; }
+.eco-app .eco-main { min-width: 0; width: calc(100% - var(--eco-sidebar-width)); margin-left: var(--eco-sidebar-width); padding: 0 var(--eco-space-8); max-width: none; min-height: 100vh; }
+.eco-app .eco-sidebar {
+  position: fixed; inset: 0 auto 0 0; width: var(--eco-sidebar-width); height: 100dvh;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+  padding: var(--eco-space-8) var(--eco-space-4); background: var(--eco-canvas);
+  color: var(--eco-text); border: 0; border-right: 1px solid var(--eco-line); z-index: 5;
+}
+.eco-app .eco-sidebar::before { content: none; }
+.eco-app .eco-sidebar .brand { display: flex; align-items: center; gap: 12px; padding: 0 12px; margin: 0 0 32px; color: var(--eco-text); font: 600 18px/26px var(--eco-font-sans); letter-spacing: normal; text-decoration: none; }
+.eco-app .eco-sidebar .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; background: var(--eco-subtle); color: var(--eco-text); border: 0; border-radius: 8px; box-shadow: none; font-size: 20px; }
+.eco-app .eco-sidebar :is(.brand small, .brand-sub, .nav-label, .side-kicker, .workspace, .shortcut-card) { display: none; }
+.eco-app .eco-sidebar nav { display: flex; flex-direction: column; gap: 8px; }
+.eco-app .eco-sidebar :is(nav button, nav a, .nav-item) {
+  display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px;
+  width: 100%; min-height: 44px; margin: 0; padding: 10px 12px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--eco-muted); box-shadow: none; text-decoration: none;
+  font: 500 14px/22px var(--eco-font-sans); letter-spacing: normal; text-align: left; transform: none;
+}
+.eco-app .eco-sidebar :is(nav button, nav a, .nav-item):hover { background: var(--eco-subtle); color: var(--eco-text); transform: none; }
+.eco-app .eco-sidebar :is(.selected, .active) { background: var(--eco-subtle); color: var(--eco-text); font-weight: 600; box-shadow: none; }
+.eco-app .eco-sidebar .nav-icon { color: inherit; }
+.eco-app .eco-sidebar :is(.sidebar-bottom, .sidebar-footer) { margin-top: auto; padding: 32px 12px 0; color: var(--eco-muted); font: 400 13px/20px var(--eco-font-sans); border: 0; }
+.eco-app .eco-sidebar :is(.sidebar-bottom p, .sidebar-bottom small, .live, .sidebar-bottom a) { font: 400 13px/20px var(--eco-font-sans); color: var(--eco-muted); letter-spacing: normal; }
+.eco-app .eco-topbar { min-height: 64px; height: auto; position: static; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border: 0; border-bottom: 1px solid var(--eco-line); background: var(--eco-surface); backdrop-filter: none; color: var(--eco-muted); font: 400 13px/20px var(--eco-font-sans); letter-spacing: normal; flex-wrap: wrap; }
+.eco-app :is(.page-title, .page-heading, .page-title-row, .welcome-row) { margin: 32px 0; gap: 24px; }
+.eco-app :is(.page-title, .page-heading, .page-title-row, .welcome-row) p { color: var(--eco-muted); margin-bottom: 0; }
+.eco-app :is(.page-title, .page-heading, .page-title-row, .welcome-row) .eyebrow { display: none; }
+.eco-app :is(.panel, .metric, .stat-card, .deck-card) { box-shadow: none; }
+@media (max-width: 760px) {
+  .eco-app .eco-sidebar { position: relative; inset: auto; width: 100%; height: auto; padding: 20px 16px 16px; border-right: 0; border-bottom: 1px solid var(--eco-line); overflow: visible; }
+  .eco-app .eco-sidebar .brand { margin-bottom: 16px; padding: 0; }
+  .eco-app .eco-sidebar nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .eco-app .eco-sidebar :is(nav button, nav a, .nav-item) { width: auto; padding: 10px 12px; gap: 8px; font-size: 13px; }
+  .eco-app .eco-sidebar :is(.sidebar-bottom, .sidebar-footer, .sidebar-spacer, .nav-key) { display: none; }
+  .eco-app .eco-main { width: 100%; margin-left: 0; padding: 0 16px; }
+  .eco-app .eco-topbar { gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .eco-app *, .eco-app *::before, .eco-app *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.eco-app :is(.primary, .secondary, .button, .primary-btn, .ghost-btn, .text-btn, .icon-button, .icon-btn, .circle-btn, .tiny-btn) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px;
+  padding: 10px 16px; border: 1px solid var(--eco-text); border-radius: var(--eco-control-radius);
+  background: var(--eco-text); color: var(--eco-surface); box-shadow: none;
+  font: 500 14px/22px var(--eco-font-sans); text-decoration: none; letter-spacing: normal;
+  transform: none; transition: background .14s, border-color .14s;
+}
+.eco-app :is(.primary, .primary-btn, .button):hover { background: #42423f; border-color: #42423f; transform: none; filter: none; box-shadow: none; }
+.eco-app :is(.secondary, .button.secondary, .ghost-btn, .text-btn, .button.ghost, .button.lime, .icon-button, .icon-btn, .circle-btn, .tiny-btn) { background: var(--eco-surface); border-color: var(--eco-control-border); color: var(--eco-text); }
+.eco-app :is(.ghost-btn, .text-btn, .button.ghost) { background: transparent; border-color: transparent; }
+.eco-app :is(.secondary, .button.secondary, .ghost-btn, .text-btn, .button.ghost, .button.lime, .icon-button, .icon-btn, .circle-btn, .tiny-btn):hover { color: var(--eco-text); background: var(--eco-subtle); border-color: var(--eco-control-border); transform: none; box-shadow: none; }
+.eco-app :is(.icon-button, .icon-btn, .circle-btn, .tiny-btn) { min-width: 44px; width: 44px; height: 44px; padding: 8px; }
+.eco-app .button.danger { color: var(--eco-error); background: var(--eco-surface); border-color: var(--eco-error); }
+.eco-app .button.danger:hover { background: var(--eco-error-soft); }
+.eco-app :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { background: var(--eco-surface); color: var(--eco-text); border: 1px solid var(--eco-control-border); border-radius: var(--eco-control-radius); min-height: 44px; padding: 10px 12px; font-size: 16px; line-height: 24px; box-shadow: none; }
+.eco-app :is(input, textarea)::placeholder { color: var(--eco-muted); opacity: 1; }
+.eco-app :is(input, select, textarea):focus { border-color: var(--eco-focus); box-shadow: none; }
+.eco-app input:is([type=checkbox], [type=radio]) { accent-color: var(--eco-text); flex: 0 0 auto; }
+.eco-app .eco-tabs { display: flex; flex-wrap: wrap; gap: 4px 16px; border-bottom: 1px solid var(--eco-line); margin-bottom: 32px; padding: 0; }
+.eco-app .eco-tabs [role=tab] { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 12px 4px; background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--eco-muted); font: 500 14px/22px var(--eco-font-sans); transform: none; }
+.eco-app .eco-tabs [role=tab]:hover { color: var(--eco-text); background: var(--eco-canvas); }
+.eco-app .eco-tabs [role=tab][aria-selected=true] { color: var(--eco-text); border-bottom-color: var(--eco-text); }
+.eco-app .eco-tab-panel { min-width: 0; }
+.eco-app .eco-settings { max-width: var(--eco-form-width); }
+.eco-app .eco-settings :is(.panel, .settings-row, .stack, .form-grid, .two-columns, .settings-layout, .settings-bottom) { display: flex; flex-direction: column; align-items: stretch; gap: 24px; width: 100%; min-width: 0; max-width: none; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.eco-app .eco-settings .eco-form-section + .eco-form-section { margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--eco-line); }
+.eco-app .eco-settings :is(label:not(.switch):not(.switch-row), .field) { display: flex; flex-direction: column; align-items: stretch; gap: 8px; color: var(--eco-text); font-size: 16px; font-weight: 500; }
+.eco-app .eco-settings label :is(small, p) { font-weight: 400; }
+.eco-app .eco-settings :is(form, .eco-form-section) { display: flex; flex-direction: column; align-items: stretch; gap: 24px; margin: 0; }
+.eco-app .eco-settings :is(h2, h3, p) { margin: 0; }
+.eco-app .eco-settings :is(h2, h3) + p { margin-top: -16px; }
+.eco-app .eco-settings .settings-row { border-top: 1px solid var(--eco-line); padding-top: 24px; }
+.eco-app .eco-settings :is(.switch, .switch-row) { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; min-height: 44px; font-size: 16px; line-height: 24px; }
+.eco-app .eco-settings .switch-row input { width: 20px; height: 20px; margin: 2px 0 0; }
+.eco-app .eco-settings :is(.button-row, .form-actions) { display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; margin: 0; }
+.eco-app .eco-settings :is(.primary, .secondary, .button) { align-self: flex-start; width: auto; }
+.eco-app .eco-settings :is(.notice, .help) { font-size: 13px; line-height: 1.6; }
+.eco-app .eco-flat-panel { border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.eco-app :is(.notice.success, .feedback.correct, .pill.review) { background: var(--eco-success-soft); color: var(--eco-success); }
+.eco-app :is(.notice.warning, .pill.learning, .pill.relearning) { background: var(--eco-warning-soft); color: var(--eco-warning); }
+.eco-app :is(.notice.error, .feedback.missed, .message.error) { background: var(--eco-error-soft); color: var(--eco-error); }
+.eco-app :is(.error-message, .due-cell.urgent, .task-due.urgent) { color: var(--eco-error); }
+@media (max-width: 760px) {
+.eco-app .eco-tabs { gap: 4px 12px; margin-bottom: 24px; }
+.eco-app .eco-tabs [role=tab] { padding: 10px 4px; }
+}
+
+/* Shared page patterns. Keep app-specific selectors in the owning app. */
+.eco-app .eco-settings :is(input, select, textarea) { margin: 0; max-width: 100%; width: 100%; }
+.eco-app .eco-settings input:is([type=checkbox], [type=radio]) { width: 20px; }
+.eco-app .eco-settings .switch input { width: 1px; }
+.eco-app .eco-settings .eco-form-section { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.eco-app .eco-settings .eco-tab-panel > .eco-form-section + .eco-form-section { padding-top: 32px; border-top: 1px solid var(--eco-line); }
+.eco-app .eco-settings .panel-heading { margin: 0; padding: 0; gap: 16px; }
+.eco-app .eco-settings .form-grid > * { grid-column: auto; }
+.eco-app .eco-settings .page-title { align-items: flex-start; }
+.eco-app .eco-settings .switch { align-self: flex-start; }
+.eco-app .eco-settings .switch-label { color: var(--eco-text); }
+.eco-app .eco-settings .switch input:checked + .switch-track { background: var(--eco-text); }
+.eco-app .eco-settings .switch input:focus-visible + .switch-track { outline: 2px solid var(--eco-focus); outline-offset: 3px; }
+.eco-app .eco-settings .notice { padding: 16px; border: 0; background: var(--eco-canvas); }
+.eco-app .eco-tab-panel > .eco-flat-panel { margin: 0; }
+.eco-app .eco-tab-panel .eco-flat-panel { border: 0; border-radius: 0; box-shadow: none; }
+.eco-app .eco-attention { font-size: 13px; color: var(--eco-error); }
+@media (max-width: 760px) {
+.eco-app .eco-settings .page-title { flex-direction: column; gap: 16px; }
+}
+
+/* One native modal owns scrolling; browsers contain focus and inert the page. */
+.eco-app:has(dialog[open]) { overflow: hidden; }
+.eco-app .eco-dialog {
+  position: fixed; inset: 0; margin: auto; width: min(860px, calc(100% - 32px));
+  max-width: 860px; height: auto; max-height: calc(100dvh - 32px); min-width: 0;
+  padding: 24px 32px; border: 1px solid var(--eco-line); border-radius: var(--eco-surface-radius);
+  background: var(--eco-surface); color: var(--eco-text); box-shadow: var(--eco-floating-shadow);
+  overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere;
+}
+.eco-app .eco-dialog::backdrop { background: var(--eco-backdrop); backdrop-filter: none; }
+.eco-app .eco-dialog:not([open]) { display: none; }
+.eco-app .eco-dialog-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.eco-app .eco-dialog-heading h2 { margin: 8px 0 0; }
+.eco-app .eco-dialog-close {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-width: 44px; min-height: 44px; width: 44px; height: 44px; padding: 8px;
+  border: 1px solid var(--eco-control-border); border-radius: var(--eco-control-radius);
+  background: var(--eco-surface); color: var(--eco-text); font: 500 20px/24px var(--eco-font-sans);
+}
+.eco-app .eco-dialog-close:hover { background: var(--eco-subtle); }
+.eco-app .eco-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.eco-app .eco-dialog :is(input, select, textarea) { max-width: 100%; }
+.eco-app .eco-dialog .eco-dialog-feedback { position: sticky; bottom: 0; left: auto; transform: none; width: auto; max-width: 100%; }
+@media (max-width: 760px) {
+  .eco-app .eco-dialog { padding: 16px; }
+  .eco-app .eco-dialog.eco-settings { width: 100%; max-width: none; height: var(--workspace-height, 100dvh); max-height: var(--workspace-height, 100dvh); margin: 0; border: 0; border-radius: 0; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+}
+
+/* App adapters opt into the shared rail; destinations remain app-owned. */
+.eco-app.eco-navigation { --eco-nav-width: var(--eco-sidebar-width); }
+.eco-app.eco-navigation.sidebar-collapsed { --eco-nav-width: 68px; }
+.eco-app.eco-navigation .eco-main { width: calc(100% - var(--eco-nav-width)); margin-left: var(--eco-nav-width); }
+.eco-app.eco-navigation .eco-sidebar { position: fixed; inset: 0 auto 0 0; width: var(--eco-nav-width); height: 100dvh; overflow-x: hidden; overflow-y: auto; }
+.eco-app.eco-navigation .eco-sidebar nav { flex-direction: column; flex-wrap: nowrap; }
+.eco-app.eco-navigation .eco-sidebar .brand { border: 0; background: transparent; min-height: 44px; border-radius: var(--eco-control-radius); text-align: left; flex-shrink: 0; }
+.eco-app.eco-navigation .eco-sidebar .brand:hover { background: var(--eco-subtle); }
+.eco-app.eco-navigation .eco-sidebar :is(.icon, .nav-icon) { flex: 0 0 20px; }
+.eco-app.eco-navigation.sidebar-collapsed .eco-sidebar { padding-inline: 11px; }
+.eco-app.eco-navigation.sidebar-collapsed .eco-sidebar :is(.sidebar-label, .nav-key, .sidebar-bottom, .sidebar-footer) { display: none; }
+.eco-app.eco-navigation.sidebar-collapsed .eco-sidebar :is(.brand, nav a, nav button, .nav-item) { justify-content: center; width: 44px; padding-inline: 0; gap: 0; }
+@media (max-width: 760px) {
+  .eco-app.eco-navigation { --eco-nav-width: calc(60px + env(safe-area-inset-left, 0px)); }
+  .eco-app.eco-navigation.sidebar-collapsed { --eco-nav-width: calc(60px + env(safe-area-inset-left, 0px)); }
+  .eco-app.eco-navigation .eco-main { padding-inline: 12px; }
+  .eco-app.eco-navigation .eco-sidebar { width: min(280px, calc(100% - 48px)); border-right: 1px solid var(--eco-line); border-bottom: 0; z-index: 10; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .eco-app.eco-navigation.sidebar-collapsed .eco-sidebar { width: var(--eco-nav-width); padding-left: calc(7px + env(safe-area-inset-left)); padding-right: 7px; }
+  .eco-app.eco-navigation .eco-sidebar :is(nav a, nav button, .nav-item) { width: 100%; }
+}
