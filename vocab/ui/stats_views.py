@@ -28,6 +28,7 @@ def render_stats_dashboard(
     circadian_periods: Optional[List[Dict[str, Any]]] = None,
     hourly_activity: Optional[List[Dict[str, Any]]] = None,
     latency_stats: Optional[Dict[str, Any]] = None,
+    daily_pace: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Renders the comprehensive learning analytics and cognitive circadian dashboard."""
     total_words = overall_stats.get("total_words", 0)
@@ -51,6 +52,40 @@ def render_stats_dashboard(
     ], console.width))
     console.print("[dim]Recall = Hard, Good or Easy / rated recall attempts. Quizzes and introductions are excluded.[/dim]")
     console.print()
+
+    if daily_pace:
+        pace_table = Table(
+            box=ROUNDED,
+            border_style="bright_green",
+            expand=True,
+            title="[bold bright_white]─── Daily review pace ───[/bold bright_white]"
+        )
+        pace_table.add_column("Day", style="bold white", width=14)
+        pace_table.add_column("Reviews", justify="right", width=12)
+        pace_table.add_column("Target", justify="right", width=12)
+        pace_table.add_column("Progress", width=30)
+
+        for entry in daily_pace:
+            target = int(entry.get("target_reviews", 0) or 0)
+            completed = int(entry.get("completed_reviews", 0) or 0)
+            additions = int(entry.get("additions", 0) or 0)
+            if target:
+                ratio = completed / target
+                color = "bright_green" if ratio >= 1 else "bright_yellow"
+                progress = f"{_generate_bar(ratio, width=20, fill_color=color)} [dim]{min(100, round(ratio * 100))}%[/dim]"
+                target_label = f"{target} [dim]({additions} added)[/dim]"
+            else:
+                progress = "[dim]Estimating target[/dim]" if entry.get("target_reviews") is None else "[dim]No additions to pace[/dim]"
+                target_label = "[dim]—[/dim]"
+            pace_table.add_row(entry["date"], str(completed), target_label, progress)
+
+        console.print(pace_table)
+        console.print("[dim]Target = trailing 7-day words/day × average reviews to first reach a 7-day interval, rounded up. Days use Beijing/Shanghai time (UTC+8); later maintenance reviews are additional.[/dim]")
+        latest = daily_pace[-1]
+        average = latest.get("average_reviews_to_7_days")
+        if average is not None:
+            console.print(f"[dim]Today: {latest['words_per_day']:.2f} words/day × {average:.2f} reviews/word; based on {latest['sample_words']} words that reached the milestone.[/dim]")
+        console.print()
 
     # 2. Circadian Day Periods & Optimal Study Windows
     if circadian_periods:

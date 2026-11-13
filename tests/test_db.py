@@ -117,6 +117,87 @@ def test_review_logging_and_stats(temp_db):
     assert stats["retention_rate"] == 100.0
 
 
+def test_daily_review_pace_tracks_trailing_word_addition_rate(temp_db):
+    """Daily targets use the rounded-up trailing addition rate and respect deck scope."""
+    group_a = temp_db.create_group("Pace A")
+    group_b = temp_db.create_group("Pace B")
+    word_ids = [temp_db.add_word(group_a, f"word-{n}", "definition") for n in range(4)]
+    other_word = temp_db.add_word(group_b, "other", "definition")
+    day_1 = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    day_2 = datetime(2026, 1, 2, 12, tzinfo=timezone.utc)
+    day_3 = datetime(2026, 1, 3, 12, tzinfo=timezone.utc)
+    day_4 = datetime(2026, 1, 4, 12, tzinfo=timezone.utc)
+
+    with temp_db.get_connection() as conn:
+        conn.executemany(
+            "UPDATE words SET created_at = ? WHERE id = ?",
+            [(day_1.isoformat(), word_ids[0]), (day_1.isoformat(), word_ids[1]),
+             (day_2.isoformat(), word_ids[2]), (day_2.isoformat(), word_ids[3]),
+             (day_2.isoformat(), other_word)],
+        )
+        conn.commit()
+
+    for reviewed_at in (day_2, day_3, day_3, day_4):
+        temp_db.log_review(word_ids[0], int(SRSGrade.GOOD), "flashcard", 7.0, now=reviewed_at)
+    temp_db.log_review(other_word, int(SRSGrade.GOOD), "flashcard", 1.0, now=day_4)
+
+    pace = temp_db.get_daily_review_pace(group_a, days=3, pace_window_days=2, now=day_4)
+
+    assert [entry["date"] for entry in pace] == ["2026-01-02", "2026-01-03", "2026-01-04"]
+    assert [entry["target_reviews"] for entry in pace] == [2, 1, 0]
+    assert [entry["completed_reviews"] for entry in pace] == [1, 2, 1]
+    assert pace[0]["progress_ratio"] == 0.5
+    assert pace[1]["progress_ratio"] == 2.0
+    assert pace[2]["progress_ratio"] is None
+
+
+def test_review_pace_uses_first_crossing_and_only_available_history(temp_db):
+    gid = temp_db.create_group("Milestones")
+    other_gid = temp_db.create_group("Other milestones")
+    words = [temp_db.add_word(gid, str(n), "test") for n in range(5)]
+    other = temp_db.add_word(other_gid, "other", "test")
+    now = datetime(2026, 1, 10, 12, tzinfo=timezone.utc)
+    yesterday = now - timedelta(days=1)
+    with temp_db.get_connection() as conn:
+        conn.execute("UPDATE words SET created_at = ?", (yesterday.isoformat(),))
+        conn.commit()
+
+    # Two attempts yesterday, five today. Intro/quiz must not cross or count.
+    for wid, when, intervals in [(words[0], yesterday, [0.01, 7, 15]),
+                                  (words[1], now, [0.01, 1, 0.01, 6, 8])]:
+        for mode in ("introduction", "quiz"):
+            temp_db.log_review(wid, 3, mode, 20, now=when)
+        for interval in intervals:
+            temp_db.log_review(wid, 1 if interval < 1 else 3, "typing", interval, now=when)
+    # Unfinished words and future crossings do not enter the average.
+    temp_db.log_review(words[2], 3, "flashcard", 6.9, now=now)
+    temp_db.log_review(words[3], 3, "flashcard", 7, now=now + timedelta(days=1))
+    temp_db.log_review(other, 3, "flashcard", 7, now=now)
+
+    previous, current = temp_db.get_daily_review_pace(gid, days=2, now=now)
+    assert previous["sample_words"] == 1
+    assert previous["average_reviews_to_7_days"] == 2
+    assert current["sample_words"] == 2
+    assert current["average_reviews_to_7_days"] == 3.5
+    assert current["words_per_day"] == 5 / 7
+    assert current["target_reviews"] == 3  # ceil((5/7) * 3.5), not ceil(5/7)*3.5
+    assert current["completed_reviews"] == 6
+
+
+def test_review_pace_without_milestone_data(temp_db):
+    now = datetime.now(timezone.utc)
+    gid = temp_db.create_group("No milestones")
+    assert temp_db.get_daily_review_pace(gid, days=1, now=now)[0]["target_reviews"] == 0
+    wid = temp_db.add_word(gid, "new", "test")
+    with temp_db.get_connection() as conn:
+        conn.execute("UPDATE words SET created_at = ? WHERE id = ?", (now.isoformat(), wid))
+        conn.commit()
+    row = temp_db.get_daily_review_pace(gid, days=1, now=now)[0]
+    assert row["target_reviews"] is None
+    assert row["average_reviews_to_7_days"] is None
+    assert row["sample_words"] == 0
+
+
 def test_due_forecast(temp_db):
     """Test forecast calculation with and without group filter."""
     g1 = temp_db.create_group("Group 1")
@@ -134,6 +215,51 @@ def test_due_forecast(temp_db):
 
     fc_g2 = temp_db.get_due_forecast(group_id=g2)
     assert fc_g2["Today"] == 1
+
+
+@pytest.mark.parametrize("midnight", [
+    datetime(2026, 10, 12, 16, tzinfo=timezone.utc),
+    datetime(2026, 12, 31, 16, tzinfo=timezone.utc),
+])
+def test_shanghai_midnight_groups_pace_activity_and_streak(temp_db, midnight):
+    shanghai = timezone(timedelta(hours=8))
+    before = midnight - timedelta(microseconds=1000)
+    yesterday = before.astimezone(shanghai).date().isoformat()
+    today = midnight.astimezone(shanghai).date().isoformat()
+    gid = temp_db.create_group("Shanghai midnight")
+    first = temp_db.add_word(gid, "before", "test")
+    second = temp_db.add_word(gid, "after", "test")
+    with temp_db.get_connection() as conn:
+        conn.execute("UPDATE words SET created_at = ? WHERE id = ?", (before.isoformat(), first))
+        # Offset-bearing input must not be shifted twice.
+        conn.execute("UPDATE words SET created_at = ? WHERE id = ?",
+                     (midnight.astimezone(shanghai).isoformat(), second))
+        conn.commit()
+    temp_db.log_review(first, 3, "flashcard", 1, now=before)
+    temp_db.log_review(first, 3, "flashcard", 7, now=midnight)
+    earlier, current = temp_db.get_daily_review_pace(gid, days=2, now=midnight)
+    assert [earlier["date"], current["date"]] == [yesterday, today]
+    assert [earlier["additions"], current["additions"]] == [1, 1]
+    assert [earlier["completed_reviews"], current["completed_reviews"]] == [1, 1]
+    assert earlier["sample_words"] == 0
+    assert current["average_reviews_to_7_days"] == 2
+    assert current["words_per_day"] == 2 / 7
+    assert temp_db.get_daily_review_activity(gid, days=2, now=midnight) == [
+        {"date": yesterday, "attempts": 1}, {"date": today, "attempts": 1}]
+    assert temp_db.get_stats_summary(gid, now=midnight)["streak_days"] == 2
+
+
+def test_forecast_uses_shanghai_midnight_boundaries(temp_db):
+    now = datetime(2026, 10, 12, 16, tzinfo=timezone.utc)
+    gid = temp_db.create_group("Shanghai forecast")
+    for index, due in enumerate([now, now + timedelta(days=1, microseconds=-1000),
+                                 now + timedelta(days=1)]):
+        wid = temp_db.add_word(gid, str(index), "test")
+        word = temp_db.get_word_by_id(wid)
+        word.state = "review"
+        word.due_date = due.isoformat()
+        temp_db.update_word(word)
+    assert temp_db.get_due_forecast(gid, days_ahead=1, now=now) == {"Today": 2, "+1d": 1}
 
 
 def test_circadian_and_latency_analytics(temp_db):
@@ -183,6 +309,44 @@ def test_circadian_and_latency_analytics(temp_db):
     assert lat_analytics["total_timed_reviews"] == 2
     assert lat_analytics["count_fluent"] == 1  # 2.0s <= 3s
     assert lat_analytics["count_hesitant"] == 1  # 8.5s > 7s
+
+
+def test_hourly_activity_omits_reviews_without_a_recorded_hour(temp_db):
+    """Missing hour metadata must not be presented as midnight activity."""
+    gid = temp_db.create_group("Unknown time")
+    wid = temp_db.add_word(group_id=gid, word="untimed", definition="test definition")
+    with temp_db.get_connection() as conn:
+        conn.execute("""
+            INSERT INTO review_logs (
+                word_id, grade, review_mode, scheduled_days, elapsed_seconds,
+                thought_time_seconds, hour_of_day, day_of_week, card_state, reviewed_at
+            ) VALUES (?, 3, 'flashcard', 2.0, 2.0, 2.0, NULL, NULL, 'review', ?)
+        """, (wid, datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+
+    hourly = temp_db.get_hourly_activity(group_id=gid)
+    assert sum(entry["reviews"] for entry in hourly) == 0
+    assert hourly[0]["reviews"] == 0
+
+
+def test_database_recovers_legacy_zero_hour_from_timestamp(temp_db):
+    """A pre-metadata default of zero must not become false midnight activity."""
+    gid = temp_db.create_group("Legacy time")
+    wid = temp_db.add_word(group_id=gid, word="legacy", definition="test definition")
+    local_time = datetime.now().astimezone().replace(hour=13, minute=0, second=0, microsecond=0)
+    with temp_db.get_connection() as conn:
+        conn.execute("""
+            INSERT INTO review_logs (
+                word_id, grade, review_mode, scheduled_days, elapsed_seconds,
+                thought_time_seconds, hour_of_day, day_of_week, card_state, reviewed_at
+            ) VALUES (?, 3, 'flashcard', 2.0, 2.0, 2.0, 0, 0, 'review', ?)
+        """, (wid, local_time.astimezone(timezone.utc).isoformat()))
+        conn.commit()
+
+    Database(temp_db.db_path)  # Runs the metadata recovery migration.
+    hourly = temp_db.get_hourly_activity(group_id=gid)
+    assert hourly[0]["reviews"] == 0
+    assert hourly[13]["reviews"] == 1
 
 
 def test_get_session_words_with_placeholders(temp_db):

@@ -39,41 +39,6 @@ class TestQuestion:
 
 CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 
-# Incremental frequency band sizes based on Cambridge English Profile & Paul Nation's vocabulary levels:
-# A1: ~1,500 core everyday words
-# A2: +1,500 basic descriptive words (cumulative 3,000)
-# B1: +2,500 intermediate conversational & text words (cumulative 5,500)
-# B2: +4,000 upper-intermediate academic & abstract words (cumulative 9,500)
-# C1: +6,500 advanced literary & technical words (cumulative 16,000)
-# C2: +9,000 erudite, GRE/SAT & mastery words (cumulative 25,000)
-TIER_BAND_WORDS = {
-    "A1": 1500,
-    "A2": 1500,
-    "B1": 2500,
-    "B2": 4000,
-    "C1": 6500,
-    "C2": 9000,
-}
-
-CEFR_VOCAB_THRESHOLDS = [
-    ("A1", 1800),
-    ("A2", 3500),
-    ("B1", 6500),
-    ("B2", 11500),
-    ("C1", 18500),
-    ("C2", 26000),
-]
-
-CEFR_WEIGHTS = {
-    "A1": 1.0,
-    "A2": 2.0,
-    "B1": 3.0,
-    "B2": 4.0,
-    "C1": 5.0,
-    "C2": 6.0,
-}
-
-
 
 # --- High-Quality Leveled Benchmark Item Bank (CEFR A1 to C2) ---
 

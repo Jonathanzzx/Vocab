@@ -265,8 +265,8 @@ class ReviewLog:
     scheduled_days: float
     elapsed_seconds: float = 0.0
     thought_time_seconds: float = 0.0  # Recall thinking latency
-    hour_of_day: int = 0  # 0 to 23
-    day_of_week: int = 0  # 0 (Monday) to 6 (Sunday)
+    hour_of_day: Optional[int] = None  # 0 to 23, or unknown for legacy logs
+    day_of_week: Optional[int] = None  # 0 (Monday) to 6 (Sunday), or unknown
     card_state: str = "review"  # 'new', 'learning', 'relearning', 'review'
     reviewed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -280,8 +280,8 @@ class ReviewLog:
             scheduled_days=float(row.get("scheduled_days", 0.0) or 0.0),
             elapsed_seconds=float(row.get("elapsed_seconds", 0.0) or 0.0),
             thought_time_seconds=float(row.get("thought_time_seconds", 0.0) or 0.0),
-            hour_of_day=int(row.get("hour_of_day", 0) or 0),
-            day_of_week=int(row.get("day_of_week", 0) or 0),
+            hour_of_day=int(row["hour_of_day"]) if row.get("hour_of_day") is not None else None,
+            day_of_week=int(row["day_of_week"]) if row.get("day_of_week") is not None else None,
             card_state=row.get("card_state", "review") or "review",
             reviewed_at=row.get("reviewed_at", "") or datetime.now(timezone.utc).isoformat(),
         )

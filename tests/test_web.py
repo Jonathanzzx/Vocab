@@ -50,6 +50,8 @@ def test_browser_shell_and_read_views(web):
     assert len(dashboard["periods"]) == 4
     assert "total_timed_reviews" in dashboard["latency"]
     assert list(dashboard["forecast"])[0] == "Today"
+    assert len(dashboard["daily_pace"]) == 7
+    assert {"date", "target_reviews", "completed_reviews"} <= dashboard["daily_pace"][0].keys()
 
 
 def test_deck_word_crud_and_terminal_visibility(web):

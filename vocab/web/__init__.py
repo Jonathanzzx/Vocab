@@ -49,6 +49,24 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
     db = WebDatabase(db_path)
     app.extensions["vocab_db"] = db
     active, lock = {}, RLock()
+    mutation_tracker = {"revision": 1, "enrichments": {}}
+
+    def bump_revision():
+        with lock:
+            mutation_tracker["revision"] += 1
+
+    def handle_enrich_complete(word):
+        with lock:
+            mutation_tracker["revision"] += 1
+            if word and hasattr(word, "id"):
+                mutation_tracker["enrichments"][word.id] = {
+                    "id": word.id,
+                    "word": word.word,
+                    "definition": word.definition,
+                    "phonetic": word.phonetic,
+                    "pos": word.pos,
+                }
+
     if seed and not db.get_setting("example_decks_initialized"):
         if not db.get_groups():
             seed_database(db)
@@ -130,7 +148,31 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
         gid = group(request.args.get("group_id"))
         return jsonify(stats=db.get_stats_summary(gid), groups=db.get_groups(),
             forecast=db.get_due_forecast(gid), hourly=db.get_hourly_activity(gid),
-            periods=db.get_circadian_periods_summary(gid), latency=db.get_latency_analytics(gid))
+            periods=db.get_circadian_periods_summary(gid), latency=db.get_latency_analytics(gid),
+            daily_activity=db.get_daily_review_activity(gid),
+            daily_pace=db.get_daily_review_pace(gid))
+
+    @app.get("/api/sync")
+    def sync_state():
+        since = integer(request.args.get("since"), default=0, low=0)
+        watching_raw = request.args.get("watching", "")
+        watching_ids = [int(w) for w in watching_raw.split(",") if w.isdigit()] if watching_raw else []
+        gid = group(request.args.get("group_id"))
+        with lock:
+            rev = mutation_tracker["revision"]
+            completed = [
+                mutation_tracker["enrichments"][wid]
+                for wid in watching_ids
+                if wid in mutation_tracker["enrichments"]
+            ]
+        return jsonify(
+            revision=rev,
+            changed=rev > since,
+            completed=completed,
+            daily_pace=db.get_daily_review_pace(gid),
+            stats=db.get_stats_summary(gid),
+            groups=db.get_groups(),
+        )
 
     @app.route("/api/groups", methods=["GET", "POST"])
     def groups():
@@ -138,6 +180,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
             return jsonify(groups=db.get_groups())
         data = body()
         gid = db.create_group(text(data, "name", True, 100), text(data, "description"), text(data, "color") or "cyan")
+        bump_revision()
         return jsonify(group=db.get_group_by_id(gid)), 201
 
     @app.route("/api/groups/<int:gid>", methods=["PATCH", "DELETE"])
@@ -148,6 +191,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
         else:
             data = body()
             db.update_group(gid, text(data, "name", True, 100), text(data, "description"), text(data, "color") or "cyan")
+        bump_revision()
         return jsonify(ok=True)
 
     @app.route("/api/words", methods=["GET", "POST"])
@@ -165,6 +209,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
         values = {key: text(data, key, key in ("word", "definition"), 500 if key == "word" else 10000)
                   for key in ("word", "definition", "phonetic", "pos", "example", "mnemonic", "tags")}
         wid = db.add_word(gid, **values)
+        bump_revision()
         return jsonify(word=get_word(wid)), 201
 
     @app.post("/api/words/quick")
@@ -217,8 +262,10 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
 
         # Start network work only after the row is committed and visible to the worker.
         BackgroundEnricher.enrich(
-            db=db, word_id=wid, word_text=word_text, needs_chinese=needs_chinese
+            db=db, word_id=wid, word_text=word_text, needs_chinese=needs_chinese,
+            on_complete=handle_enrich_complete,
         )
+        bump_revision()
         return jsonify(
             word=get_word(wid), duplicate=False,
             enriching=needs_chinese or not cached_entry,
@@ -230,6 +277,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
             word = get_word(wid)
             if request.method == "DELETE":
                 db.delete_word(wid)
+                bump_revision()
                 return jsonify(ok=True)
             if request.method == "PATCH":
                 data = body()
@@ -245,6 +293,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
                     if type(data["retired"]) is not bool:
                         raise BadRequest("Retired must be true or false.")
                     db.set_word_mastery(wid, data["retired"])
+                bump_revision()
             return jsonify(word=get_word(wid), reviews=db.get_word_review_logs(wid))
 
     @app.post("/api/dictionary")
@@ -284,7 +333,11 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
             if item is None or item[0] != session["owner"]:
                 raise NotFound("Session expired. Saved reviews are safe; start a new session.")
             item[2] = monotonic()
-            result = item[1].act(body()) if request.method == "POST" else item[1].view()
+            if request.method == "POST":
+                result = item[1].act(body())
+                bump_revision()
+            else:
+                result = item[1].view()
             return jsonify(id=sid, **result)
 
     @app.get("/api/checks")
@@ -294,6 +347,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
     @app.delete("/api/checks/<int:tid>")
     def delete_check(tid):
         db.delete_test_history(tid)
+        bump_revision()
         return jsonify(ok=True)
 
     @app.get("/api/export")
@@ -349,6 +403,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
                 path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
                 with db.transaction():
                     groups_added, words_added = DataExporter.import_from_json(db, str(path))
+            bump_revision()
             return jsonify(groups_added=groups_added, words_added=words_added)
         except (ValueError, UnicodeError) as error:
             raise BadRequest(str(error))
@@ -378,6 +433,7 @@ def create_app(db_path=None, *, testing=False, seed=True, cookie_secure=False):
                 result = {"keyboard_controls": enabled}
             else:
                 raise BadRequest("Unknown maintenance action.")
+            bump_revision()
         return jsonify(result)
 
     @app.get("/api/research")

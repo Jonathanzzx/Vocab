@@ -100,8 +100,8 @@ def test_background_enricher():
             on_complete=on_done
         )
 
-        # Wait up to 10 seconds for background thread
-        finished = done_event.wait(timeout=10.0)
+        # Wait up to 25 seconds for background thread (network fallbacks)
+        finished = done_event.wait(timeout=25.0)
         assert finished, "Background enrichment timed out"
 
         refreshed = db.get_word_by_id(word_id)
@@ -483,3 +483,27 @@ def dictionary_responses(monkeypatch):
     monkeypatch.setattr(dictionary.urllib.request, "urlopen", urlopen)
     # This form test covers validation, not background enrichment (tested separately).
     monkeypatch.setattr(dictionary.BackgroundEnricher, "enrich", lambda **kwargs: None)
+
+
+def test_bounded_dict_eviction():
+    """Test that BoundedDict caps size and evicts oldest entries using FIFO."""
+    from vocab.dictionary import BoundedDict
+    cache = BoundedDict(max_size=3)
+    cache["a"] = 1
+    cache["b"] = 2
+    cache["c"] = 3
+    assert len(cache) == 3
+
+    # Adding a 4th key should evict 'a'
+    cache["d"] = 4
+    assert len(cache) == 3
+    assert "a" not in cache
+    assert "b" in cache
+    assert "c" in cache
+    assert "d" in cache
+
+    # Updating an existing key should not evict anything
+    cache["b"] = 20
+    assert len(cache) == 3
+    assert cache["b"] == 20
+

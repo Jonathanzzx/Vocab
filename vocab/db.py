@@ -12,6 +12,16 @@ from vocab.srs import MAX_VALID_THOUGHT_TIME, is_valid_thought_time
 
 
 DEFAULT_DB_FILENAME = "vocab_data.db"
+# Beijing/Shanghai civil time is UTC+8 with no current daylight-saving changes.
+# A fixed offset also works on Windows without a separate IANA tzdata package.
+SHANGHAI_TIMEZONE = timezone(timedelta(hours=8), "Asia/Shanghai")
+
+
+def _shanghai_time(now: Optional[datetime] = None) -> datetime:
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return now.astimezone(SHANGHAI_TIMEZONE)
 
 
 class Database:
@@ -96,8 +106,8 @@ class Database:
                     scheduled_days REAL NOT NULL,
                     elapsed_seconds REAL DEFAULT 0.0,
                     thought_time_seconds REAL DEFAULT 0.0,
-                    hour_of_day INTEGER DEFAULT 0,
-                    day_of_week INTEGER DEFAULT 0,
+                    hour_of_day INTEGER,
+                    day_of_week INTEGER,
                     card_state TEXT DEFAULT 'review',
                     reviewed_at TEXT NOT NULL
                 )
@@ -108,11 +118,24 @@ class Database:
             if "thought_time_seconds" not in log_cols:
                 cursor.execute("ALTER TABLE review_logs ADD COLUMN thought_time_seconds REAL DEFAULT 0.0")
             if "hour_of_day" not in log_cols:
-                cursor.execute("ALTER TABLE review_logs ADD COLUMN hour_of_day INTEGER DEFAULT 0")
+                # Unknown historical times must remain unknown rather than appearing
+                # as a false midnight activity record in analytics.
+                cursor.execute("ALTER TABLE review_logs ADD COLUMN hour_of_day INTEGER")
             if "day_of_week" not in log_cols:
-                cursor.execute("ALTER TABLE review_logs ADD COLUMN day_of_week INTEGER DEFAULT 0")
+                cursor.execute("ALTER TABLE review_logs ADD COLUMN day_of_week INTEGER")
             if "card_state" not in log_cols:
                 cursor.execute("ALTER TABLE review_logs ADD COLUMN card_state TEXT DEFAULT 'review'")
+
+            # Before hour metadata was introduced, SQLite filled the new column
+            # with 0.  Recover the actual local hour when the timestamp proves
+            # that 0 was only a placeholder; genuine midnight reviews remain 0.
+            cursor.execute("""
+                UPDATE review_logs
+                SET hour_of_day = CAST(strftime('%H', reviewed_at, 'localtime') AS INTEGER)
+                WHERE hour_of_day = 0
+                  AND strftime('%H', reviewed_at, 'localtime') IS NOT NULL
+                  AND CAST(strftime('%H', reviewed_at, 'localtime') AS INTEGER) != 0
+            """)
 
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_reviewed_at ON review_logs(reviewed_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_hour ON review_logs(hour_of_day)")
@@ -1103,7 +1126,9 @@ class Database:
                 SELECT rl.grade, COUNT(*) as cnt
                 FROM review_logs rl
                 JOIN words w ON rl.word_id = w.id
-                WHERE rl.reviewed_at >= ? AND rl.review_mode NOT IN ('quiz', 'introduction')
+                WHERE rl.reviewed_at >= ?
+                  AND rl.review_mode NOT IN ('quiz', 'introduction')
+                  AND rl.hour_of_day BETWEEN 0 AND 23
             """
             log_params: List[Any] = [seven_days_ago]
             if group_id is not None:
@@ -1131,9 +1156,9 @@ class Database:
             total_review_attempts = cursor.fetchone()["cnt"]
 
             # Daily activity streak
-            cursor.execute("SELECT DISTINCT DATE(reviewed_at) as review_date FROM review_logs ORDER BY review_date DESC")
+            cursor.execute("SELECT DISTINCT DATE(reviewed_at, '+8 hours') as review_date FROM review_logs ORDER BY review_date DESC")
             active_dates = [r["review_date"] for r in cursor.fetchall()]
-            streak = self._calculate_streak(active_dates)
+            streak = self._calculate_streak(active_dates, now=now)
 
             # Maturity levels:
             # New: state == 'new'
@@ -1174,6 +1199,149 @@ class Database:
                 "streak_days": streak,
                 "next_session": next_session,
             }
+
+    def get_daily_review_activity(
+        self,
+        group_id: Optional[int] = None,
+        days: int = 365,
+        now: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        """Returns recall attempt counts by Beijing/Shanghai calendar day."""
+        now = _shanghai_time(now)
+        end_date = now.date()
+        start_date = end_date - timedelta(days=max(1, days) - 1)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT DATE(rl.reviewed_at, '+8 hours') AS review_date, COUNT(*) AS attempts
+                FROM review_logs rl
+                JOIN words w ON rl.word_id = w.id
+                WHERE DATE(rl.reviewed_at, '+8 hours') BETWEEN ? AND ?
+                  AND rl.review_mode NOT IN ('quiz', 'introduction')
+            """
+            params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
+            if group_id is not None:
+                query += " AND w.group_id = ?"
+                params.append(group_id)
+            query += " GROUP BY DATE(rl.reviewed_at, '+8 hours')"
+            cursor.execute(query, params)
+            counts = {row["review_date"]: row["attempts"] for row in cursor.fetchall()}
+
+        return [
+            {
+                "date": (start_date + timedelta(days=offset)).isoformat(),
+                "attempts": counts.get((start_date + timedelta(days=offset)).isoformat(), 0),
+            }
+            for offset in range((end_date - start_date).days + 1)
+        ]
+
+    def get_daily_review_pace(
+        self,
+        group_id: Optional[int] = None,
+        days: int = 7,
+        pace_window_days: int = 7,
+        now: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return daily recall progress against the recent word-addition pace.
+
+        Multiply the trailing addition rate by the observed mean recall attempts
+        to first reach a scheduled interval >= 7 days, then round up. Count the
+        crossing attempt and failures, but exclude quizzes and introductions.
+        Each Shanghai calendar day uses only crossings observed by that day. Words
+        that have not crossed are excluded from the mean, not counted as zero.
+        """
+        now = _shanghai_time(now)
+        days = max(1, days)
+        pace_window_days = max(1, pace_window_days)
+        end_date = now.date()
+        start_date = end_date - timedelta(days=days - 1)
+        addition_start = start_date - timedelta(days=pace_window_days - 1)
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            addition_query = """
+                SELECT DATE(w.created_at, '+8 hours') AS added_date, COUNT(*) AS additions
+                FROM words w
+                WHERE DATE(w.created_at, '+8 hours') BETWEEN ? AND ?
+            """
+            addition_params: List[Any] = [addition_start.isoformat(), end_date.isoformat()]
+            if group_id is not None:
+                addition_query += " AND w.group_id = ?"
+                addition_params.append(group_id)
+            addition_query += " GROUP BY DATE(w.created_at, '+8 hours')"
+            cursor.execute(addition_query, addition_params)
+            additions = {row["added_date"]: int(row["additions"]) for row in cursor.fetchall()}
+
+            review_query = """
+                SELECT DATE(rl.reviewed_at, '+8 hours') AS review_date, COUNT(*) AS attempts
+                FROM review_logs rl
+                JOIN words w ON rl.word_id = w.id
+                WHERE DATE(rl.reviewed_at, '+8 hours') BETWEEN ? AND ?
+                  AND rl.review_mode NOT IN ('quiz', 'introduction')
+            """
+            review_params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
+            if group_id is not None:
+                review_query += " AND w.group_id = ?"
+                review_params.append(group_id)
+            review_query += " GROUP BY DATE(rl.reviewed_at, '+8 hours')"
+            cursor.execute(review_query, review_params)
+            reviews = {row["review_date"]: int(row["attempts"]) for row in cursor.fetchall()}
+
+            # Number attempts BEFORE filtering to crossings so early failures
+            # are included. A word contributes only its first crossing.
+            scope = " AND w.group_id = ?" if group_id is not None else ""
+            crossing_params: List[Any] = [now.isoformat()]
+            if group_id is not None:
+                crossing_params.append(group_id)
+            cursor.execute(f"""
+                WITH numbered AS (
+                    SELECT rl.word_id, rl.scheduled_days, rl.reviewed_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY rl.word_id
+                               ORDER BY julianday(rl.reviewed_at), rl.id
+                           ) AS attempt_number
+                    FROM review_logs rl
+                    JOIN words w ON w.id = rl.word_id
+                    WHERE rl.review_mode NOT IN ('quiz', 'introduction')
+                      AND julianday(rl.reviewed_at) <= julianday(?) {scope}
+                ), first_crossings AS (
+                    SELECT word_id, MIN(attempt_number) AS attempt_number
+                    FROM numbered WHERE scheduled_days >= 7
+                    GROUP BY word_id
+                )
+                SELECT DATE(n.reviewed_at, '+8 hours') AS crossed_date, n.attempt_number
+                FROM numbered n JOIN first_crossings f
+                  ON n.word_id = f.word_id AND n.attempt_number = f.attempt_number
+            """, crossing_params)
+            crossings = cursor.fetchall()
+
+        rows: List[Dict[str, Any]] = []
+        for offset in range(days):
+            current_date = start_date + timedelta(days=offset)
+            additions_in_window = sum(
+                additions.get((current_date - timedelta(days=lookback)).isoformat(), 0)
+                for lookback in range(pace_window_days)
+            )
+            date_key = current_date.isoformat()
+            counts = [row["attempt_number"] for row in crossings if row["crossed_date"] <= date_key]
+            sample_words = len(counts)
+            average_reviews = sum(counts) / sample_words if sample_words else None
+            # Round once, after multiplication, using exact integer arithmetic.
+            denominator = pace_window_days * sample_words
+            target = ((additions_in_window * sum(counts) + denominator - 1) // denominator
+                      if sample_words else (0 if not additions_in_window else None))
+            completed = reviews.get(date_key, 0)
+            rows.append({
+                "date": date_key,
+                "additions": additions.get(date_key, 0),
+                "words_per_day": additions_in_window / pace_window_days,
+                "average_reviews_to_7_days": average_reviews,
+                "sample_words": sample_words,
+                "target_reviews": target,
+                "completed_reviews": completed,
+                "progress_ratio": round(completed / target, 3) if target else None,
+            })
+        return rows
 
     def get_recommended_next_session(
         self,
@@ -1361,10 +1529,10 @@ class Database:
         date_str = local_rec.strftime("%b %d")
         return f"{date_str} {time_part}", f"{date_str} {time_part} (in {d_str})"
 
-    def _calculate_streak(self, active_dates: List[str]) -> int:
+    def _calculate_streak(self, active_dates: List[str], now: Optional[datetime] = None) -> int:
         if not active_dates:
             return 0
-        today = datetime.now(timezone.utc).date()
+        today = _shanghai_time(now).date()
         today_str = today.isoformat()
         yesterday_str = (today - timedelta(days=1)).isoformat()
 
@@ -1384,23 +1552,25 @@ class Database:
                 break
         return streak
 
-    def get_due_forecast(self, group_id: Optional[int] = None, days_ahead: int = 7) -> Dict[str, int]:
+    def get_due_forecast(self, group_id: Optional[int] = None, days_ahead: int = 7,
+                         now: Optional[datetime] = None) -> Dict[str, int]:
         """Returns forecast of how many cards will be due in the next N days."""
-        now = datetime.now(timezone.utc)
+        now = _shanghai_time(now)
         forecast = {}
         with self.get_connection() as conn:
             cursor = conn.cursor()
             for i in range(days_ahead + 1):
                 day_target = (now + timedelta(days=i)).date()
-                day_start = datetime(day_target.year, day_target.month, day_target.day, 0, 0, 0, tzinfo=timezone.utc).isoformat()
-                day_end = datetime(day_target.year, day_target.month, day_target.day, 23, 59, 59, tzinfo=timezone.utc).isoformat()
+                midnight = datetime.combine(day_target, datetime.min.time(), tzinfo=SHANGHAI_TIMEZONE)
+                day_start = midnight.astimezone(timezone.utc).isoformat()
+                day_end = (midnight + timedelta(days=1)).astimezone(timezone.utc).isoformat()
 
                 if i == 0:
                     # Due today includes already overdue cards and new cards
-                    query = "SELECT COUNT(*) as cnt FROM words WHERE state != 'mastered' AND (state = 'new' OR due_date <= ?)"
+                    query = "SELECT COUNT(*) as cnt FROM words WHERE state != 'mastered' AND (state = 'new' OR julianday(due_date) < julianday(?))"
                     params: List[Any] = [day_end]
                 else:
-                    query = "SELECT COUNT(*) as cnt FROM words WHERE due_date >= ? AND due_date <= ? AND state NOT IN ('new', 'mastered')"
+                    query = "SELECT COUNT(*) as cnt FROM words WHERE julianday(due_date) >= julianday(?) AND julianday(due_date) < julianday(?) AND state NOT IN ('new', 'mastered')"
                     params = [day_start, day_end]
 
                 if group_id is not None:

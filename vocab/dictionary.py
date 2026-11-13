@@ -27,10 +27,29 @@ class DictionaryEntry:
     example: str = ""
 
 
+MAX_CACHE_SIZE = 5000
+
+
+class BoundedDict(dict):
+    """Dictionary that bounds its size using FIFO eviction to prevent memory leaks."""
+
+    def __init__(self, max_size: int = MAX_CACHE_SIZE, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_size = max_size
+
+    def __setitem__(self, key, value):
+        if len(self) >= self.max_size and key not in self:
+            try:
+                del self[next(iter(self))]
+            except (KeyError, StopIteration):
+                pass
+        super().__setitem__(key, value)
+
+
 # In-memory session caches to avoid redundant API queries
-_LOOKUP_CACHE: Dict[str, DictionaryEntry] = {}
-_CHINESE_CACHE: Dict[str, str] = {}
-_EXISTENCE_CACHE: Dict[str, Tuple[bool, Optional[str]]] = {}
+_LOOKUP_CACHE: Dict[str, DictionaryEntry] = BoundedDict()
+_CHINESE_CACHE: Dict[str, str] = BoundedDict()
+_EXISTENCE_CACHE: Dict[str, Tuple[bool, Optional[str]]] = BoundedDict()
 
 POS_MAPPING = {
     "n": "noun",
@@ -219,7 +238,7 @@ class DictionaryService:
         # 3. Youdao fallback check for legitimate foreign / modern terms
         try:
             encoded = urllib.parse.quote(clean)
-            url = f"http://dict.youdao.com/suggest?q={encoded}&num=1&doctype=json"
+            url = f"https://dict.youdao.com/suggest?q={encoded}&num=1&doctype=json"
             req = urllib.request.Request(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VocabApp/1.0"}
@@ -398,7 +417,7 @@ class DictionaryService:
         # 1. Attempt Youdao Dictionary Suggest API
         try:
             encoded = urllib.parse.quote(clean_word)
-            url = f"http://dict.youdao.com/suggest?q={encoded}&num=1&doctype=json"
+            url = f"https://dict.youdao.com/suggest?q={encoded}&num=1&doctype=json"
             req = urllib.request.Request(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) VocabApp/1.0"}

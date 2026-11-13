@@ -134,6 +134,7 @@ class VocabApp:
                 circadian = self.db.get_circadian_periods_summary(self.active_group_id)
                 hourly = self.db.get_hourly_activity(self.active_group_id)
                 latency = self.db.get_latency_analytics(self.active_group_id)
+                daily_pace = self.db.get_daily_review_pace(self.active_group_id)
 
                 render_stats_dashboard(
                     overall_stats=stats,
@@ -142,7 +143,8 @@ class VocabApp:
                     selected_group_name=active_grp.name if active_grp else "All Groups",
                     circadian_periods=circadian,
                     hourly_activity=hourly,
-                    latency_stats=latency
+                    latency_stats=latency,
+                    daily_pace=daily_pace,
                 )
                 pause_prompt()
 
@@ -420,13 +422,15 @@ def main() -> None:
             circadian = app.db.get_circadian_periods_summary(app.active_group_id)
             hourly = app.db.get_hourly_activity(app.active_group_id)
             latency = app.db.get_latency_analytics(app.active_group_id)
+            daily_pace = app.db.get_daily_review_pace(app.active_group_id)
             active_name = app.active_group.name if app.active_group else "All Groups"
             render_stats_dashboard(
                 stats, groups, forecast,
                 selected_group_name=active_name,
                 circadian_periods=circadian,
                 hourly_activity=hourly,
-                latency_stats=latency
+                latency_stats=latency,
+                daily_pace=daily_pace,
             )
         elif args.action == "add":
             add_word_form(app.db, app.active_group_id)
